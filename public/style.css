@@ -390,3 +390,83 @@ body {
     gap: 12px;
   }
 }
+/* ========== 搜索抽屉 ========== */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-icon {
+  background: none;
+  border: 1px solid var(--border);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  border-color: var(--primary);
+  background: var(--bg);
+}
+
+.btn-icon.active {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.search-drawer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+  border-top: 0 solid var(--border);
+}
+
+.search-drawer.open {
+  max-height: 120px;
+  border-top: 1px solid var(--border);
+}
+
+.search-drawer-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search-drawer-inner label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-drawer-inner input[type="date"] {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.search-drawer-inner input[type="date"]:focus {
+  border-color: var(--primary);
+}
+
+/* ========== 浏览次数 ========== */
+.post-views {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-left: 12px;
+}

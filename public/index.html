@@ -11,7 +11,20 @@
   <header class="header">
     <div class="header-inner">
       <h1 class="logo">✨ 我的空间</h1>
-      <button class="btn-login" id="btnLogin" onclick="toggleAuth()">🔑 管理</button>
+      <div class="header-actions">
+        <button class="btn-icon" onclick="toggleSearch()" title="搜索">🔍</button>
+        <button class="btn-icon" id="btnChangePwd" onclick="openChangePwd()" title="修改密码" style="display:none">🔐</button>
+        <button class="btn-login" id="btnLogin" onclick="toggleAuth()">🔑 管理</button>
+      </div>
+    </div>
+    <!-- 可折叠搜索栏 -->
+    <div class="search-drawer" id="searchDrawer">
+      <div class="search-drawer-inner">
+        <label>从 <input type="date" id="searchStart"></label>
+        <label>到 <input type="date" id="searchEnd"></label>
+        <button class="btn btn-primary btn-sm" onclick="doSearch()">查找</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearSearch()">清除</button>
+      </div>
     </div>
   </header>
 
@@ -27,6 +40,21 @@
     </div>
   </div>
 
+  
+  <!-- 修改密码弹窗 -->
+  <div class="modal-overlay" id="changePwdModal">
+    <div class="modal">
+      <h3>修改密码</h3>
+      <input type="password" id="oldPwdInput" placeholder="当前密码">
+      <input type="password" id="newPwdInput" placeholder="新密码">
+      <input type="password" id="confirmPwdInput" placeholder="确认新密码">
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="doChangePwd()">确认修改</button>
+        <button class="btn btn-secondary" onclick="closeChangePwd()">取消</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 发布区域（仅管理员可见） -->
   <section class="publish-area" id="publishArea" style="display:none;">
     <div class="card publish-card">
@@ -38,7 +66,6 @@
         </label>
         <button class="btn btn-primary" onclick="submitPost()">发布</button>
       </div>
-      <!-- 图片预览 -->
       <div class="image-preview" id="imagePreview" style="display:none;">
         <img id="previewImg" src="" alt="预览">
         <button class="remove-img" onclick="removeImage()">✕</button>
@@ -47,9 +74,7 @@
   </section>
 
   <!-- 动态列表 -->
-  <main class="feed" id="feed">
-    <!-- 动态卡片由 JS 动态渲染 -->
-  </main>
+  <main class="feed" id="feed"></main>
 
   <!-- 加载更多 -->
   <div class="load-more" id="loadMore" style="display:none;">
