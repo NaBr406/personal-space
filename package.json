@@ -1,0 +1,16 @@
+{
+  "name": "personal-space",
+  "version": "1.0.0",
+  "description": "轻量级个人空间 - 类似朋友圈的动态分享平台",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "better-sqlite3": "^9.4.3",
+    "bcryptjs": "^2.4.3"
+  }
+}

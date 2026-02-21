@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的空间</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- 顶部导航 -->
+  <header class="header">
+    <div class="header-inner">
+      <h1 class="logo">✨ 我的空间</h1>
+      <button class="btn-login" id="btnLogin" onclick="toggleAuth()">🔑 管理</button>
+    </div>
+  </header>
+
+  <!-- 管理员登录弹窗 -->
+  <div class="modal-overlay" id="authModal">
+    <div class="modal">
+      <h3>管理员登录</h3>
+      <input type="password" id="passwordInput" placeholder="请输入管理员密码" onkeydown="if(event.key==='Enter')doLogin()">
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="doLogin()">登录</button>
+        <button class="btn btn-secondary" onclick="closeAuth()">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 发布区域（仅管理员可见） -->
+  <section class="publish-area" id="publishArea" style="display:none;">
+    <div class="card publish-card">
+      <textarea id="postContent" placeholder="记录此刻的想法..." rows="3"></textarea>
+      <div class="publish-footer">
+        <label class="upload-btn">
+          📷 添加图片
+          <input type="file" id="postImage" accept="image/*" hidden onchange="previewImage(this)">
+        </label>
+        <button class="btn btn-primary" onclick="submitPost()">发布</button>
+      </div>
+      <!-- 图片预览 -->
+      <div class="image-preview" id="imagePreview" style="display:none;">
+        <img id="previewImg" src="" alt="预览">
+        <button class="remove-img" onclick="removeImage()">✕</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 动态列表 -->
+  <main class="feed" id="feed">
+    <!-- 动态卡片由 JS 动态渲染 -->
+  </main>
+
+  <!-- 加载更多 -->
+  <div class="load-more" id="loadMore" style="display:none;">
+    <button class="btn btn-secondary" onclick="loadPosts()">加载更多</button>
+  </div>
+
+  <!-- 空状态 -->
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <p>📝 还没有动态，快来发布第一条吧～</p>
+  </div>
+
+  <!-- 提示消息 -->
+  <div class="toast" id="toast"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
