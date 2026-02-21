@@ -13,11 +13,23 @@
       <h1 class="logo">✨ 我的空间</h1>
       <div class="header-actions">
         <button class="btn-icon" onclick="toggleSearch()" title="搜索">🔍</button>
-        <button class="btn-icon" id="btnChangePwd" onclick="openChangePwd()" title="修改密码" style="display:none">🔐</button>
-        <button class="btn-login" id="btnLogin" onclick="toggleAuth()">🔑 管理</button>
+        <button class="btn-icon" id="btnAdmin" onclick="showAdminPanel()" title="用户管理" style="display:none">⚙️</button>
+
+        <!-- 未登录 -->
+        <div id="loginArea" style="display:flex;gap:6px;">
+          <button class="btn btn-primary btn-sm" onclick="showAuthModal('login')">登录</button>
+          <button class="btn btn-secondary btn-sm" onclick="showAuthModal('register')">注册</button>
+        </div>
+
+        <!-- 已登录 -->
+        <div id="userArea" style="display:none;align-items:center;gap:8px;">
+          <img id="userAvatar" src="/default-avatar.png" class="header-avatar" onclick="showProfile()">
+          <span id="userNickname" class="header-nickname"></span>
+          
+        </div>
       </div>
     </div>
-    <!-- 可折叠搜索栏 -->
+    <!-- 搜索栏 -->
     <div class="search-drawer" id="searchDrawer">
       <div class="search-drawer-inner">
         <label>从 <input type="date" id="searchStart"></label>
@@ -28,34 +40,58 @@
     </div>
   </header>
 
-  <!-- 管理员登录弹窗 -->
+  <!-- 登录/注册弹窗 -->
   <div class="modal-overlay" id="authModal">
     <div class="modal">
-      <h3>管理员登录</h3>
-      <input type="password" id="passwordInput" placeholder="请输入管理员密码" onkeydown="if(event.key==='Enter')doLogin()">
-      <div class="modal-actions">
-        <button class="btn btn-primary" onclick="doLogin()">登录</button>
-        <button class="btn btn-secondary" onclick="closeAuth()">取消</button>
+      <h3 id="authTitle">登录</h3>
+      <input type="text" id="authUsername" placeholder="用户名" autocomplete="username">
+      <input type="password" id="authPassword" placeholder="密码" autocomplete="current-password">
+      <div id="nicknameRow" style="display:none;">
+        <input type="text" id="authNickname" placeholder="昵称（选填）">
       </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="authSubmitBtn" onclick="doLogin()">登录</button>
+        <button class="btn btn-secondary" onclick="closeAuthModal()">取消</button>
+      </div>
+      <div class="auth-switch" id="authSwitch"></div>
     </div>
   </div>
 
-  
-  <!-- 修改密码弹窗 -->
-  <div class="modal-overlay" id="changePwdModal">
+  <!-- 个人资料弹窗 -->
+  <div class="modal-overlay" id="profileModal">
     <div class="modal">
-      <h3>修改密码</h3>
-      <input type="password" id="oldPwdInput" placeholder="当前密码">
-      <input type="password" id="newPwdInput" placeholder="新密码">
-      <input type="password" id="confirmPwdInput" placeholder="确认新密码">
+      <h3>个人资料</h3>
+      <div class="profile-avatar-wrap">
+        <img id="profileAvatar" src="/default-avatar.png" class="profile-avatar">
+        <label class="upload-btn-small">
+          更换头像
+          <input type="file" id="profileAvatarInput" accept="image/*" hidden onchange="previewProfileAvatar(this)">
+        </label>
+      </div>
+      <input type="text" id="profileNickname" placeholder="昵称">
+      <input type="password" id="profileNewPwd" placeholder="新密码（不改留空）">
       <div class="modal-actions">
-        <button class="btn btn-primary" onclick="doChangePwd()">确认修改</button>
-        <button class="btn btn-secondary" onclick="closeChangePwd()">取消</button>
+        <button class="btn btn-primary" onclick="saveProfile()">保存</button>
+        <button class="btn btn-secondary" onclick="closeProfile()">取消</button>
+      </div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);text-align:center;">
+        <button class="btn btn-danger btn-sm" onclick="confirmLogout()">退出登录</button>
       </div>
     </div>
   </div>
 
-  <!-- 发布区域（仅管理员可见） -->
+  <!-- 用户管理弹窗（超管） -->
+  <div class="modal-overlay" id="adminModal">
+    <div class="modal modal-wide">
+      <h3>用户管理</h3>
+      <div id="userList" class="user-list"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeAdminPanel()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 发布区域 -->
   <section class="publish-area" id="publishArea" style="display:none;">
     <div class="card publish-card">
       <textarea id="postContent" placeholder="记录此刻的想法..." rows="3"></textarea>
