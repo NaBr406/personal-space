@@ -61,7 +61,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
-    token TEXT UNIQUE NOT NULL,
+    token_hash TEXT UNIQUE NOT NULL,
     created_at DATETIME DEFAULT (datetime('now', 'localtime')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
@@ -130,7 +130,8 @@ async function generateThumbnail(filePath) {
 function getUser(req) {
   const token = req.headers["authorization"]?.replace("Bearer ", "");
   if (!token) return null;
-  return db.prepare("SELECT id, username, nickname, avatar, role FROM users WHERE token = ?").get(token) || null;
+  const tokenHash = require("crypto").createHash("sha256").update(token).digest("hex");
+  return db.prepare("SELECT u.id, u.username, u.nickname, u.avatar, u.role FROM users u JOIN sessions s ON u.id = s.user_id WHERE s.token_hash = ?").get(tokenHash) || null;
 }
 
 function requireLogin(req, res, next) {
@@ -250,7 +251,8 @@ app.post("/api/register", (req, res) => {
   const displayName = (nickname || "").trim() || username;
 
   const result = db.prepare("INSERT INTO users (username, password_hash, nickname, register_ip) VALUES (?, ?, ?, ?)").run(username, hash, displayName, clientIp);
-  db.prepare("INSERT INTO sessions (user_id, token) VALUES (?, ?)").run(result.lastInsertRowid, token);
+  const regTokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  db.prepare("INSERT INTO sessions (user_id, token_hash) VALUES (?, ?)").run(result.lastInsertRowid, regTokenHash);
   const user = db.prepare("SELECT id, username, nickname, avatar, role FROM users WHERE id = ?").get(result.lastInsertRowid);
 
   res.status(201).json({ ...user, token });
@@ -269,7 +271,8 @@ app.post("/api/login", (req, res) => {
   }
 
   const token = crypto.randomBytes(32).toString("hex");
-  db.prepare("INSERT INTO sessions (user_id, token) VALUES (?, ?)").run(user.id, token);
+  const loginTokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  db.prepare("INSERT INTO sessions (user_id, token_hash) VALUES (?, ?)").run(user.id, loginTokenHash);
 
   res.json({ id: user.id, username: user.username, nickname: user.nickname, avatar: user.avatar, role: user.role, token });
 });
@@ -345,18 +348,23 @@ app.delete("/api/users/:id", requireSuperAdmin, (req, res) => {
   if (!target) return res.status(404).json({ error: "用户不存在" });
   if (target.role === "superadmin") return res.status(403).json({ error: "不能删除超级管理员" });
 
-  // 删除用户的点赞记录
-  db.prepare("DELETE FROM likes WHERE user_id = ?").run(id);
-  // 删除用户的动态及图片
+  // 删除用户（事务保护）
   const posts = db.prepare("SELECT * FROM posts WHERE user_id = ?").all(id);
+  const deleteUserTx = db.transaction(() => {
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
+    db.prepare("DELETE FROM likes WHERE user_id = ?").run(id);
+    for (const post of posts) {
+      db.prepare("DELETE FROM likes WHERE post_id = ?").run(post.id);
+    }
+    db.prepare("DELETE FROM posts WHERE user_id = ?").run(id);
+    db.prepare("DELETE FROM users WHERE id = ?").run(id);
+  });
+  deleteUserTx();
+  // 清理图片文件（事务外，不影响数据一致性）
   for (const post of posts) {
     if (post.image) fs.unlink(path.join(__dirname, "public", post.image), () => {});
     if (post.thumbnail) fs.unlink(path.join(__dirname, "public", post.thumbnail), () => {});
-    db.prepare("DELETE FROM likes WHERE post_id = ?").run(post.id);
   }
-  db.prepare("DELETE FROM posts WHERE user_id = ?").run(id);
-  // 删除用户
-  db.prepare("DELETE FROM users WHERE id = ?").run(id);
 
   res.json({ message: "用户已删除" });
 });
@@ -497,13 +505,16 @@ app.post("/api/posts/:id/like", requireLogin, (req, res) => {
 // 登出
 app.post("/api/logout", (req, res) => {
   const token = req.headers.authorization?.replace("Bearer ", "");
-  if (token) db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+  if (token) {
+    const logoutHash = crypto.createHash("sha256").update(token).digest("hex");
+    db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(logoutHash);
+  }
   res.json({ message: "已登出" });
 });
 
 // ========== 页面路由 ==========
 app.get("/post/:id", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "detail.html"));
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // ========== 错误处理 ==========

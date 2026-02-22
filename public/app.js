@@ -335,13 +335,24 @@ async function deletePost(id) {
 async function showDetail(id) {
   const feed = document.getElementById("feed");
   const loadMoreDiv = document.getElementById("loadMore");
+  const pagination = document.getElementById("pagination");
 
-  feed.style.transition = "opacity 0.2s ease, transform 0.2s ease";
-  feed.style.opacity = "0";
-  feed.style.transform = "translateY(8px)";
-  loadMoreDiv.style.display = "none";
+  // 隐藏列表（保留 DOM 和滚动位置）
+  feed.style.display = "none";
+  if (loadMoreDiv) loadMoreDiv.style.display = "none";
+  if (pagination) pagination.style.display = "none";
+  const fab = document.getElementById("fab");
+  if (fab) fab.style.display = "none";
 
-  await new Promise(r => setTimeout(r, 200));
+  // 确保 detailView 容器存在
+  let detailView = document.getElementById("detailView");
+  if (!detailView) {
+    detailView = document.createElement("div");
+    detailView.id = "detailView";
+    feed.parentNode.insertBefore(detailView, feed.nextSibling);
+  }
+  detailView.style.display = "";
+  detailView.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-secondary)">加载中...</div>';
 
   fetch(`/api/posts/${id}/view`, { method: "POST" }).catch(() => {});
 
@@ -355,12 +366,12 @@ async function showDetail(id) {
       authorHtml = `<div class="post-author"><img src="${escapeHtml(post.author_avatar || '/default-avatar.png')}" class="author-avatar"><span>${escapeHtml(post.author_name)}</span></div>`;
     }
     let contentHtml = post.content ? `<div class="post-content" style="font-size:1.05rem;line-height:1.9">${escapeHtml(post.content)}</div>` : "";
-    let imageHtml = post.image ? `<div class="post-image"><img src="${escapeHtml(post.thumbnail || post.image)}" style="max-height:600px;object-fit:contain" onclick="recordView(${post.id}); window.open('${escapeHtml(post.image)}')"></div>` : "";
+    let imageHtml = post.image ? `<div class="post-image"><img src="${escapeHtml(post.thumbnail || post.image)}" style="max-height:600px;object-fit:contain" onclick="window.open('${escapeHtml(post.image)}')"></div>` : "";
 
     const liked = post.liked ? "liked" : "";
     const likeBtn = `<button class="btn-like ${liked}" onclick="toggleLike(${post.id}, this)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> <span>${post.like_count || 0}</span></button>`;
 
-    feed.innerHTML = `
+    detailView.innerHTML = `
       <a href="javascript:void(0)" onclick="backToList()" class="back-link">← 返回</a>
       <div class="card post-card" style="cursor:default">
         ${authorHtml}
@@ -374,38 +385,35 @@ async function showDetail(id) {
       </div>
     `;
 
-    feed.style.transform = "translateY(8px)";
-    feed.style.opacity = "0";
+    detailView.style.opacity = "0";
+    detailView.style.transform = "translateY(8px)";
+    detailView.style.transition = "opacity 0.25s ease, transform 0.25s ease";
     requestAnimationFrame(() => {
-      feed.style.transition = "opacity 0.25s ease, transform 0.25s ease";
-      feed.style.opacity = "1";
-      feed.style.transform = "translateY(0)";
+      detailView.style.opacity = "1";
+      detailView.style.transform = "translateY(0)";
     });
 
     history.pushState({ detail: id }, "", "/post/" + id);
     document.title = (post.content ? post.content.slice(0, 30) : "图片动态") + " - 我的空间";
     viewMode = "detail";
   } catch (err) {
-    feed.innerHTML = `<div style="text-align:center;padding:60px;color:#ef4444">😢 ${err.message}</div>`;
-    feed.style.opacity = "1";
-    feed.style.transform = "translateY(0)";
+    detailView.innerHTML = `<div style="text-align:center;padding:60px;color:#ef4444">😢 ${err.message}</div>`;
   }
 }
 
 function backToList() {
-  const feed = document.getElementById("feed");
-  feed.style.transition = "opacity 0.2s ease, transform 0.2s ease";
-  feed.style.opacity = "0";
-  feed.style.transform = "translateY(8px)";
-  setTimeout(() => {
-    feed.innerHTML = "";
-    feed.style.opacity = "1";
-    feed.style.transform = "translateY(0)";
-    loadPosts();
-    history.pushState(null, "", "/");
-    document.title = "我的空间";
-    viewMode = "list";
-  }, 200);
+  viewMode = "list";
+  const detailView = document.getElementById("detailView");
+  if (detailView) detailView.style.display = "none";
+  document.getElementById("feed").style.display = "";
+  const pagination = document.getElementById("pagination");
+  if (pagination) pagination.style.display = "";
+  const loadMore = document.getElementById("loadMore");
+  if (loadMore) loadMore.style.display = "";
+  const fab = document.getElementById("fab");
+  if (fab) fab.style.display = "";
+  history.pushState(null, "", "/");
+  document.title = "我的空间";
 }
 
 window.addEventListener("popstate", (e) => {
@@ -422,13 +430,23 @@ window.addEventListener("popstate", (e) => {
 
 // ========== 超管：用户管理 ==========
 async function showAdminPanel() {
-  const feed = document.getElementById("feed");
+  // 隐藏列表
+  document.getElementById("feed").style.display = "none";
   const loadMoreDiv = document.getElementById("loadMore");
-  loadMoreDiv.style.display = "none";
+  if (loadMoreDiv) loadMoreDiv.style.display = "none";
+  const pagination = document.getElementById("pagination");
+  if (pagination) pagination.style.display = "none";
+  const fab = document.getElementById("fab");
+  if (fab) fab.style.display = "none";
 
-  feed.style.transition = "opacity 0.2s ease";
-  feed.style.opacity = "0";
-  await new Promise(r => setTimeout(r, 200));
+  let detailView = document.getElementById("detailView");
+  if (!detailView) {
+    detailView = document.createElement("div");
+    detailView.id = "detailView";
+    const feed = document.getElementById("feed");
+    feed.parentNode.insertBefore(detailView, feed.nextSibling);
+  }
+  detailView.style.display = "";
 
   try {
     const res = await fetch("/api/users", {
@@ -446,12 +464,12 @@ async function showAdminPanel() {
         <td>
           ${u.role === 'guest' ? `<button class="btn btn-primary btn-sm" onclick="setRole(${u.id}, 'admin')">设为管理员</button>` : ''}
           ${u.role === 'admin' ? `<button class="btn btn-secondary btn-sm" onclick="setRole(${u.id}, 'guest')">取消管理员</button>` : ''}
-          ${u.role !== 'superadmin' ? `<button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-left:4px" onclick="deleteUser(${u.id}, ${JSON.stringify(u.nickname)})">删除</button>` : ''}
+          ${u.role !== 'superadmin' ? `<button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-left:4px" onclick="deleteUser(${u.id})" data-nickname="${escapeHtml(u.nickname)}">删除</button>` : ''}
         </td>
       </tr>
     `).join("");
 
-    feed.innerHTML = `
+    detailView.innerHTML = `
       <a href="javascript:void(0)" onclick="backToList()" class="back-link">← 返回</a>
       <div class="card" style="overflow-x:auto">
         <h3 style="margin-bottom:16px">用户管理</h3>
@@ -462,9 +480,8 @@ async function showAdminPanel() {
       </div>
     `;
 
-    feed.style.opacity = "1";
     viewMode = "admin";
-  } catch (err) { showToast(err.message); feed.style.opacity = "1"; }
+  } catch (err) { showToast(err.message); }
 }
 
 async function setRole(userId, role) {
@@ -480,7 +497,9 @@ async function setRole(userId, role) {
   } catch (err) { showToast(err.message); }
 }
 
-async function deleteUser(userId, nickname) {
+async function deleteUser(userId) {
+  const btn = event.target.closest("[data-nickname]");
+  const nickname = btn ? btn.dataset.nickname : "该用户";
   if (!confirm(`确定要删除用户「${nickname}」吗？\n\n该操作将删除该用户的所有动态和数据！`)) return;
   if (!confirm(`再次确认：真的要删除「${nickname}」吗？\n\n此操作不可撤销！`)) return;
   const input = prompt(`最后确认：请输入该用户昵称「${nickname}」以确认删除：`);
