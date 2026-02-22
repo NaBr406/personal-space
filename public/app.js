@@ -72,7 +72,7 @@ async function doLogin() {
     currentPage = 1;
     document.getElementById("feed").innerHTML = "";
     loadPosts();
-    showToast("欢迎回来，" + data.nickname + " ✨");
+    showToast("欢迎回来，" + data.nickname + "");
   } catch (err) { showToast(err.message); }
 }
 
@@ -95,7 +95,7 @@ async function doRegister() {
     localStorage.setItem("token", data.token);
     closeAuthModal();
     updateUI();
-    showToast("注册成功，欢迎 " + data.nickname + " 🎉");
+    showToast("注册成功，欢迎 " + data.nickname + "");
   } catch (err) { showToast(err.message); }
 }
 
@@ -214,11 +214,11 @@ function createPostCard(post) {
 
   // 点赞按钮
   const liked = post.liked ? "liked" : "";
-  const likeBtn = `<button class="btn-like ${liked}" onclick="toggleLike(${post.id}, this)">❤ <span>${post.like_count || 0}</span></button>`;
+  const likeBtn = `<button class="btn-like ${liked}" onclick="toggleLike(${post.id}, this)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> <span>${post.like_count || 0}</span></button>`;
 
   let deleteBtn = "";
   if (currentUser && (currentUser.role === "superadmin" || (post.user_id && post.user_id === currentUser.id))) {
-    deleteBtn = `<button class="btn-delete" onclick="deletePost(${post.id})">🗑</button>`;
+    deleteBtn = `<button class="btn-delete" onclick="deletePost(${post.id})"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg></button>`;
   }
 
   card.innerHTML = `
@@ -227,7 +227,7 @@ function createPostCard(post) {
     ${imageHtml}
     <div class="post-footer">
       <span class="post-time">${formatTime(post.created_at)}</span>
-      <span class="post-views">👁 ${post.views || 0}</span>
+      <span class="post-views"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> ${post.views || 0}</span>
       ${likeBtn}
       ${deleteBtn}
     </div>
@@ -282,7 +282,7 @@ async function submitPost() {
     const card = createPostCard(post);
     feed.insertBefore(card, feed.firstChild);
     document.getElementById("emptyState").style.display = "none";
-    showToast("发布成功 🎉");
+    showToast("发布成功");
   } catch (err) { showToast("发布失败: " + err.message); }
 }
 
@@ -333,7 +333,7 @@ async function showDetail(id) {
     let imageHtml = post.image ? `<div class="post-image"><img src="${escapeHtml(post.image)}" style="max-height:600px;object-fit:contain" onclick="recordView(${post.id}); window.open(this.src)"></div>` : "";
 
     const liked = post.liked ? "liked" : "";
-    const likeBtn = `<button class="btn-like ${liked}" onclick="toggleLike(${post.id}, this)">❤ <span>${post.like_count || 0}</span></button>`;
+    const likeBtn = `<button class="btn-like ${liked}" onclick="toggleLike(${post.id}, this)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> <span>${post.like_count || 0}</span></button>`;
 
     feed.innerHTML = `
       <a href="javascript:void(0)" onclick="backToList()" class="back-link">← 返回</a>
@@ -343,7 +343,7 @@ async function showDetail(id) {
         ${imageHtml}
         <div class="post-footer">
           <span class="post-time">📅 ${formatTime(post.created_at)}</span>
-          <span class="post-views">👁 ${post.views || 0}</span>
+          <span class="post-views"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> ${post.views || 0}</span>
           ${likeBtn}
         </div>
       </div>
@@ -502,7 +502,7 @@ async function saveProfile() {
 
     updateUI();
     closeProfile();
-    showToast("已更新 ✨");
+    showToast("已更新");
   } catch (err) { showToast(err.message); }
 }
 
@@ -510,7 +510,6 @@ async function saveProfile() {
 function previewImage(input) {
   const file = input.files[0];
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024) { showToast("图片不能超过 5MB"); input.value = ""; return; }
   const reader = new FileReader();
   reader.onload = (e) => {
     document.getElementById("previewImg").src = e.target.result;

@@ -467,7 +467,7 @@ body {
 .post-footer .spacer { flex: 1; }
 
 /* 点赞按钮 */
-.like-btn {
+.btn-like {
   background: none;
   border: 1px solid var(--border);
   padding: 4px 12px;
@@ -481,8 +481,9 @@ body {
   gap: 4px;
 }
 
-.like-btn:hover { border-color: #ef4444; color: #ef4444; }
-.like-btn.liked { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
+.btn-like:hover { border-color: #ef4444; color: #ef4444; }
+.btn-like.liked { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
+.btn-like.liked svg { fill: #ef4444; stroke: #ef4444; }
 
 .btn-delete {
   background: none;
@@ -613,3 +614,21 @@ body {
 }
 
 .back-link:hover { background: var(--border); }
+
+/* ========== Lucide Icons ========== */
+.icon-inline {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+}
+
+.logo .icon-inline {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.btn-icon .icon-inline {
+  width: 1.2em;
+  height: 1.2em;
+}
