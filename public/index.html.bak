@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的空间</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- 顶部导航 -->
+  <header class="header">
+    <div class="header-inner">
+      <h1 class="logo">✨ 我的空间</h1>
+      <div class="header-actions">
+        <button class="btn-icon" onclick="toggleSearch()" title="搜索">🔍</button>
+        <button class="btn-icon" id="btnAdmin" onclick="showAdminPanel()" title="用户管理" style="display:none">⚙️</button>
+
+        <!-- 未登录 -->
+        <div id="loginArea" style="display:flex;gap:6px;">
+          <button class="btn btn-primary btn-sm" onclick="showAuthModal('login')">登录</button>
+          <button class="btn btn-secondary btn-sm" onclick="showAuthModal('register')">注册</button>
+        </div>
+
+        <!-- 已登录 -->
+        <div id="userArea" style="display:none;align-items:center;gap:8px;">
+          <img id="userAvatar" src="/default-avatar.png" class="header-avatar" onclick="showProfile()">
+          <span id="userNickname" class="header-nickname"></span>
+          
+        </div>
+      </div>
+    </div>
+    <!-- 搜索栏 -->
+    <div class="search-drawer" id="searchDrawer">
+      <div class="search-drawer-inner">
+        <label>从 <input type="date" id="searchStart"></label>
+        <label>到 <input type="date" id="searchEnd"></label>
+        <button class="btn btn-primary btn-sm" onclick="doSearch()">查找</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearSearch()">清除</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 登录/注册弹窗 -->
+  <div class="modal-overlay" id="authModal">
+    <div class="modal">
+      <h3 id="authTitle">登录</h3>
+      <input type="text" id="authUsername" placeholder="用户名" autocomplete="username">
+      <input type="password" id="authPassword" placeholder="密码" autocomplete="current-password">
+      <div id="nicknameRow" style="display:none;">
+        <input type="text" id="authNickname" placeholder="昵称（选填）">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="authSubmitBtn" onclick="doLogin()">登录</button>
+        <button class="btn btn-secondary" onclick="closeAuthModal()">取消</button>
+      </div>
+      <div class="auth-switch" id="authSwitch"></div>
+    </div>
+  </div>
+
+  <!-- 个人资料弹窗 -->
+  <div class="modal-overlay" id="profileModal">
+    <div class="modal">
+      <h3>个人资料</h3>
+      <div class="profile-avatar-wrap">
+        <img id="profileAvatar" src="/default-avatar.png" class="profile-avatar">
+        <label class="upload-btn-small">
+          更换头像
+          <input type="file" id="profileAvatarInput" accept="image/*" hidden onchange="previewProfileAvatar(this)">
+        </label>
+      </div>
+      <input type="text" id="profileNickname" placeholder="昵称">
+      <input type="password" id="profileNewPwd" placeholder="新密码（不改留空）">
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="saveProfile()">保存</button>
+        <button class="btn btn-secondary" onclick="closeProfile()">取消</button>
+      </div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);text-align:center;">
+        <button class="btn btn-danger btn-sm" onclick="confirmLogout()">退出登录</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 用户管理弹窗（超管） -->
+  <div class="modal-overlay" id="adminModal">
+    <div class="modal modal-wide">
+      <h3>用户管理</h3>
+      <div id="userList" class="user-list"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeAdminPanel()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 发布区域 -->
+  <section class="publish-area" id="publishArea" style="display:none;">
+    <div class="card publish-card">
+      <textarea id="postContent" placeholder="记录此刻的想法..." rows="3"></textarea>
+      <div class="publish-footer">
+        <label class="upload-btn">
+          📷 添加图片
+          <input type="file" id="postImage" accept="image/*" hidden onchange="previewImage(this)">
+        </label>
+        <button class="btn btn-primary" onclick="submitPost()">发布</button>
+      </div>
+      <div class="image-preview" id="imagePreview" style="display:none;">
+        <img id="previewImg" src="" alt="预览">
+        <button class="remove-img" onclick="removeImage()">✕</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 动态列表 -->
+  <main class="feed" id="feed"></main>
+
+  <!-- 加载更多 -->
+  <div class="load-more" id="loadMore" style="display:none;">
+    <button class="btn btn-secondary" onclick="loadPosts()">加载更多</button>
+  </div>
+
+  <!-- 空状态 -->
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <p>📝 还没有动态，快来发布第一条吧～</p>
+  </div>
+
+  <!-- 提示消息 -->
+  <div class="toast" id="toast"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,12 +1,14 @@
 const express = require("express");
 const path = require("path");
 const multer = require("multer");
+const sharp = require("sharp");
+const fs = require("fs");
 const Database = require("better-sqlite3");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 // ========== 数据库初始化 ==========
 const db = new Database(path.join(__dirname, "data.db"));
@@ -54,6 +56,7 @@ db.exec(`
 
 // 迁移：给旧 posts 表加 user_id
 try { db.exec("ALTER TABLE posts ADD COLUMN user_id INTEGER"); } catch(e) {}
+try { db.exec("ALTER TABLE posts ADD COLUMN thumbnail TEXT"); } catch(e) {}
 
 // 初始化超级管理员
 const superAdmin = db.prepare("SELECT id FROM users WHERE role = 'superadmin'").get();
@@ -89,6 +92,24 @@ const upload = multer({
     }
   }
 });
+
+// ========== 缩略图生成 ==========
+async function generateThumbnail(filePath) {
+  try {
+    const dir = path.dirname(filePath);
+    const ext = path.extname(filePath);
+    const base = path.basename(filePath, ext);
+    const thumbPath = path.join(dir, "thumb_" + base + ".webp");
+    await sharp(filePath)
+      .resize(800, null, { withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(thumbPath);
+    return "/uploads/thumb_" + base + ".webp";
+  } catch (e) {
+    console.error("缩略图生成失败:", e.message);
+    return null;
+  }
+}
 
 // ========== Token 认证中间件 ==========
 function getUser(req) {
@@ -295,18 +316,28 @@ app.post("/api/posts/:id/view", (req, res) => {
 });
 
 // 发布动态（管理员+超管）
-app.post("/api/posts", requireAdmin, upload.single("image"), (req, res) => {
-  const content = (req.body.content || "").trim() || null;
-  const image = req.file ? `/uploads/${req.file.filename}` : null;
-  if (!content && !image) return res.status(400).json({ error: "内容和图片至少需要一个" });
+app.post("/api/posts", requireAdmin, upload.single("image"), async (req, res) => {
+  try {
+    const content = (req.body.content || "").trim() || null;
+    const image = req.file ? `/uploads/${req.file.filename}` : null;
+    if (!content && !image) return res.status(400).json({ error: "内容和图片至少需要一个" });
 
-  const result = db.prepare("INSERT INTO posts (content, image, user_id, created_at) VALUES (?, ?, ?, datetime('now', 'localtime'))").run(content, image, req.user.id);
-  const post = db.prepare(`
-    SELECT p.*, u.nickname as author_name, u.avatar as author_avatar, 0 as like_count
-    FROM posts p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?
-  `).get(result.lastInsertRowid);
+    let thumbnail = null;
+    if (req.file) {
+      thumbnail = await generateThumbnail(req.file.path);
+    }
 
-  res.status(201).json(post);
+    const result = db.prepare("INSERT INTO posts (content, image, thumbnail, user_id, created_at) VALUES (?, ?, ?, ?, datetime('now', 'localtime'))").run(content, image, thumbnail, req.user.id);
+    const post = db.prepare(`
+      SELECT p.*, u.nickname as author_name, u.avatar as author_avatar, 0 as like_count
+      FROM posts p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?
+    `).get(result.lastInsertRowid);
+
+    res.status(201).json(post);
+  } catch (e) {
+    console.error("发帖失败:", e.message);
+    res.status(500).json({ error: "发帖失败" });
+  }
 });
 
 // 删除动态（管理员+超管）
@@ -316,8 +347,10 @@ app.delete("/api/posts/:id", requireAdmin, (req, res) => {
   if (!post) return res.status(404).json({ error: "动态不存在" });
 
   if (post.image) {
-    const fs = require("fs");
     fs.unlink(path.join(__dirname, "public", post.image), () => {});
+  }
+  if (post.thumbnail) {
+    fs.unlink(path.join(__dirname, "public", post.thumbnail), () => {});
   }
 
   db.prepare("DELETE FROM likes WHERE post_id = ?").run(id);
