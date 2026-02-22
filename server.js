@@ -67,6 +67,29 @@ db.exec(`
   )
 `);
 
+// 邀请码表
+db.exec(`CREATE TABLE IF NOT EXISTS invite_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT UNIQUE NOT NULL,
+  created_date TEXT NOT NULL,
+  used_by INTEGER,
+  used_at DATETIME,
+  FOREIGN KEY (used_by) REFERENCES users(id)
+)`);
+
+// 每天自动生成邀请码
+function generateDailyInviteCode() {
+  const today = new Date().toISOString().slice(0, 10);
+  const existing = db.prepare("SELECT id FROM invite_codes WHERE created_date = ? AND used_by IS NULL").get(today);
+  if (!existing) {
+    const code = crypto.randomBytes(4).toString("hex").toUpperCase();
+    db.prepare("INSERT INTO invite_codes (code, created_date) VALUES (?, ?)").run(code, today);
+    console.log("\u{1f4e8} \u4eca\u65e5\u9080\u8bf7\u7801\u5df2\u751f\u6210: " + code);
+  }
+}
+generateDailyInviteCode();
+setInterval(generateDailyInviteCode, 3600000);
+
 // 迁移：给旧 posts 表加 user_id
 try { db.exec("ALTER TABLE posts ADD COLUMN user_id INTEGER"); } catch(e) {}
 try { db.exec("ALTER TABLE posts ADD COLUMN thumbnail TEXT"); } catch(e) {}
@@ -226,6 +249,14 @@ app.get("/api/captcha", (req, res) => {
 app.post("/api/register", (req, res) => {
   const regIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
   if (rateLimit("register:" + regIp, 5, 60000)) return res.status(429).json({ error: "注册请求过于频繁，请稍后再试" });
+
+  // 邀请码校验
+  const { inviteCode } = req.body;
+  if (!inviteCode) return res.status(400).json({ error: "请填写邀请码" });
+  const today = new Date().toISOString().slice(0, 10);
+  const validCode = db.prepare("SELECT id, code FROM invite_codes WHERE code = ? AND created_date = ? AND used_by IS NULL").get(inviteCode.trim().toUpperCase(), today);
+  if (!validCode) return res.status(400).json({ error: "邀请码无效或已过期" });
+
   const { captchaToken, captchaAnswer } = req.body;
   if (!captchaToken || captchaAnswer === undefined) return res.status(400).json({ error: "请完成验证码" });
   const cap = captchaStore.get(captchaToken);
@@ -253,6 +284,8 @@ app.post("/api/register", (req, res) => {
   const result = db.prepare("INSERT INTO users (username, password_hash, nickname, register_ip) VALUES (?, ?, ?, ?)").run(username, hash, displayName, clientIp);
   const regTokenHash = crypto.createHash("sha256").update(token).digest("hex");
   db.prepare("INSERT INTO sessions (user_id, token_hash) VALUES (?, ?)").run(result.lastInsertRowid, regTokenHash);
+  // 标记邀请码已使用
+  db.prepare("UPDATE invite_codes SET used_by = ?, used_at = datetime('now', 'localtime') WHERE code = ? AND created_date = ? AND used_by IS NULL").run(result.lastInsertRowid, inviteCode.trim().toUpperCase(), today);
   const user = db.prepare("SELECT id, username, nickname, avatar, role FROM users WHERE id = ?").get(result.lastInsertRowid);
 
   res.status(201).json({ ...user, token });
@@ -342,6 +375,29 @@ app.put("/api/users/:id/role", requireSuperAdmin, (req, res) => {
 });
 
 // ========== 删除用户 API ==========
+// 获取今日邀请码（超管）
+app.get("/api/invite-code", requireSuperAdmin, (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  let code = db.prepare("SELECT code FROM invite_codes WHERE created_date = ? AND used_by IS NULL").get(today);
+  if (!code) {
+    // 生成新的
+    const newCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+    db.prepare("INSERT INTO invite_codes (code, created_date) VALUES (?, ?)").run(newCode, today);
+    code = { code: newCode };
+  }
+  res.json({ code: code.code, date: today });
+});
+
+// 手动刷新邀请码（超管）
+app.post("/api/invite-code/refresh", requireSuperAdmin, (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  // 作废今天未使用的旧码
+  db.prepare("DELETE FROM invite_codes WHERE created_date = ? AND used_by IS NULL").run(today);
+  const newCode = crypto.randomBytes(4).toString("hex").toUpperCase();
+  db.prepare("INSERT INTO invite_codes (code, created_date) VALUES (?, ?)").run(newCode, today);
+  res.json({ code: newCode, date: today });
+});
+
 app.delete("/api/users/:id", requireSuperAdmin, (req, res) => {
   const id = parseInt(req.params.id);
   const target = db.prepare("SELECT * FROM users WHERE id = ?").get(id);

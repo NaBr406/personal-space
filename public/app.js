@@ -28,6 +28,12 @@ document.addEventListener("DOMContentLoaded", () => {
   } else {
     loadPosts();
   }
+
+  // 从主页跳转来的 #login 锚点
+  if (window.location.hash === "#login" && !currentUser) {
+    setTimeout(() => showAuthModal("login"), 300);
+    history.replaceState(null, "", window.location.pathname);
+  }
 });
 
 // ========== 认证 ==========
@@ -47,6 +53,7 @@ function showAuthModal(mode) {
   else { captchaRow.style.display = "none"; }
   document.getElementById("authSubmitBtn").onclick = mode === "login" ? doLogin : doRegister;
   document.getElementById("nicknameRow").style.display = mode === "login" ? "none" : "block";
+  document.getElementById("inviteRow").style.display = mode === "login" ? "none" : "block";
   document.getElementById("authSwitch").innerHTML = mode === "login"
     ? '没有账号？<a href="javascript:void(0)" onclick="showAuthModal(\'register\')">去注册</a>'
     : '已有账号？<a href="javascript:void(0)" onclick="showAuthModal(\'login\')">去登录</a>';
@@ -109,7 +116,7 @@ async function doRegister() {
     const res = await fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, nickname, captchaToken, captchaAnswer })
+      body: JSON.stringify({ username, password, nickname, captchaToken, captchaAnswer, inviteCode: document.getElementById("authInviteCode").value.trim() })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
@@ -469,8 +476,22 @@ async function showAdminPanel() {
       </tr>
     `).join("");
 
+    // 获取邀请码
+    let inviteHtml = "";
+    try {
+      const invRes = await fetch("/api/invite-code", { headers: { "Authorization": "Bearer " + currentUser.token } });
+      if (invRes.ok) {
+        const inv = await invRes.json();
+        inviteHtml = `<div class="card" style="margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div><span style="color:var(--muted)">\u4eca\u65e5\u9080\u8bf7\u7801:</span> <strong style="font-size:1.2em;letter-spacing:2px;color:var(--primary)">${inv.code}</strong></div>
+          <button class="btn btn-secondary btn-sm" onclick="refreshInviteCode()">\u5237\u65b0\u9080\u8bf7\u7801</button>
+        </div>`;
+      }
+    } catch(e) {}
+
     detailView.innerHTML = `
       <a href="javascript:void(0)" onclick="backToList()" class="back-link">← 返回</a>
+      ${inviteHtml}
       <div class="card" style="overflow-x:auto">
         <h3 style="margin-bottom:16px">用户管理</h3>
         <table class="admin-table">
@@ -493,6 +514,18 @@ async function setRole(userId, role) {
     });
     if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
     showToast("已更新");
+    showAdminPanel();
+  } catch (err) { showToast(err.message); }
+}
+
+async function refreshInviteCode() {
+  try {
+    const res = await fetch("/api/invite-code/refresh", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    showToast("\u9080\u8bf7\u7801\u5df2\u5237\u65b0");
     showAdminPanel();
   } catch (err) { showToast(err.message); }
 }
