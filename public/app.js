@@ -35,6 +35,9 @@ async function fetchMe(token) {
 function showAuthModal(mode) {
   document.getElementById("authTitle").textContent = mode === "login" ? "登录" : "注册";
   document.getElementById("authSubmitBtn").textContent = mode === "login" ? "登录" : "注册";
+  const captchaRow = document.getElementById("captchaRow");
+  if (mode === "register") { captchaRow.style.display = "flex"; refreshCaptcha(); }
+  else { captchaRow.style.display = "none"; }
   document.getElementById("authSubmitBtn").onclick = mode === "login" ? doLogin : doRegister;
   document.getElementById("nicknameRow").style.display = mode === "login" ? "none" : "block";
   document.getElementById("authSwitch").innerHTML = mode === "login"
@@ -76,6 +79,17 @@ async function doLogin() {
   } catch (err) { showToast(err.message); }
 }
 
+let captchaToken = "";
+async function refreshCaptcha() {
+  try {
+    const res = await fetch("/api/captcha");
+    const data = await res.json();
+    document.getElementById("captchaQuestion").textContent = data.question;
+    document.getElementById("captchaInput").value = "";
+    captchaToken = data.token;
+  } catch (e) { showToast("获取验证码失败"); }
+}
+
 async function doRegister() {
   const username = document.getElementById("authUsername").value.trim();
   const password = document.getElementById("authPassword").value.trim();
@@ -83,10 +97,12 @@ async function doRegister() {
   if (!username || !password) { showToast("请填写完整"); return; }
 
   try {
+    const captchaAnswer = document.getElementById("captchaInput").value.trim();
+    if (!captchaAnswer) { showToast("请输入验证码答案"); return; }
     const res = await fetch("/api/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, nickname })
+      body: JSON.stringify({ username, password, nickname, captchaToken, captchaAnswer })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error);
@@ -423,6 +439,7 @@ async function showAdminPanel() {
         <td>
           ${u.role === 'guest' ? `<button class="btn btn-primary btn-sm" onclick="setRole(${u.id}, 'admin')">设为管理员</button>` : ''}
           ${u.role === 'admin' ? `<button class="btn btn-secondary btn-sm" onclick="setRole(${u.id}, 'guest')">取消管理员</button>` : ''}
+          ${u.role !== 'superadmin' ? `<button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-left:4px" onclick="deleteUser(${u.id}, '${u.nickname.replace(/'/g, "\\'")}')">删除</button>` : ''}
         </td>
       </tr>
     `).join("");
@@ -452,6 +469,23 @@ async function setRole(userId, role) {
     });
     if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
     showToast("已更新");
+    showAdminPanel();
+  } catch (err) { showToast(err.message); }
+}
+
+async function deleteUser(userId, nickname) {
+  if (!confirm(`确定要删除用户「${nickname}」吗？\n\n该操作将删除该用户的所有动态和数据！`)) return;
+  if (!confirm(`再次确认：真的要删除「${nickname}」吗？\n\n此操作不可撤销！`)) return;
+  const input = prompt(`最后确认：请输入该用户昵称「${nickname}」以确认删除：`);
+  if (input !== nickname) { showToast("输入不匹配，已取消删除"); return; }
+
+  try {
+    const res = await fetch(`/api/users/${userId}`, {
+      method: "DELETE",
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    showToast("用户已删除");
     showAdminPanel();
   } catch (err) { showToast(err.message); }
 }

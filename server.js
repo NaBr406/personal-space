@@ -57,6 +57,7 @@ db.exec(`
 // 迁移：给旧 posts 表加 user_id
 try { db.exec("ALTER TABLE posts ADD COLUMN user_id INTEGER"); } catch(e) {}
 try { db.exec("ALTER TABLE posts ADD COLUMN thumbnail TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE users ADD COLUMN register_ip TEXT"); } catch(e) {}
 
 // 初始化超级管理员
 const superAdmin = db.prepare("SELECT id FROM users WHERE role = 'superadmin'").get();
@@ -147,12 +148,47 @@ function requireSuperAdmin(req, res, next) {
 
 // ========== 认证 API ==========
 
+// ========== 验证码 ==========
+const captchaStore = new Map(); // token -> { answer, expires }
+
+app.get("/api/captcha", (req, res) => {
+  const a = Math.floor(Math.random() * 20) + 1;
+  const b = Math.floor(Math.random() * 20) + 1;
+  const ops = [
+    { symbol: "+", answer: a + b },
+    { symbol: "-", answer: Math.max(a, b) - Math.min(a, b) },
+  ];
+  const op = ops[Math.floor(Math.random() * ops.length)];
+  const x = op.symbol === "-" ? Math.max(a, b) : a;
+  const y = op.symbol === "-" ? Math.min(a, b) : b;
+  const question = `${x} ${op.symbol} ${y} = ?`;
+  const token = crypto.randomBytes(16).toString("hex");
+  captchaStore.set(token, { answer: op.answer, expires: Date.now() + 5 * 60 * 1000 });
+  // 清理过期
+  for (const [k, v] of captchaStore) {
+    if (v.expires < Date.now()) captchaStore.delete(k);
+  }
+  res.json({ question, token });
+});
+
 // 注册
 app.post("/api/register", (req, res) => {
+  const { captchaToken, captchaAnswer } = req.body;
+  if (!captchaToken || captchaAnswer === undefined) return res.status(400).json({ error: "请完成验证码" });
+  const cap = captchaStore.get(captchaToken);
+  if (!cap) return res.status(400).json({ error: "验证码已过期，请刷新" });
+  if (cap.expires < Date.now()) { captchaStore.delete(captchaToken); return res.status(400).json({ error: "验证码已过期，请刷新" }); }
+  if (parseInt(captchaAnswer) !== cap.answer) return res.status(400).json({ error: "验证码错误" });
+  captchaStore.delete(captchaToken);
   const { username, password, nickname } = req.body;
   if (!username || !password) return res.status(400).json({ error: "用户名和密码必填" });
   if (username.length < 2 || username.length > 20) return res.status(400).json({ error: "用户名 2-20 字符" });
   if (password.length < 4) return res.status(400).json({ error: "密码至少 4 位" });
+
+  // IP 限制：每个 IP 只能注册一次
+  const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
+  const ipExists = db.prepare("SELECT id FROM users WHERE register_ip = ?").get(clientIp);
+  if (ipExists) return res.status(403).json({ error: "该网络已注册过账号" });
 
   const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username);
   if (existing) return res.status(409).json({ error: "用户名已存在" });
@@ -161,7 +197,7 @@ app.post("/api/register", (req, res) => {
   const token = crypto.randomBytes(32).toString("hex");
   const displayName = (nickname || "").trim() || username;
 
-  const result = db.prepare("INSERT INTO users (username, password_hash, nickname, token) VALUES (?, ?, ?, ?)").run(username, hash, displayName, token);
+  const result = db.prepare("INSERT INTO users (username, password_hash, nickname, token, register_ip) VALUES (?, ?, ?, ?, ?)").run(username, hash, displayName, token, clientIp);
   const user = db.prepare("SELECT id, username, nickname, avatar, role FROM users WHERE id = ?").get(result.lastInsertRowid);
 
   res.status(201).json({ ...user, token });
@@ -245,6 +281,29 @@ app.put("/api/users/:id/role", requireSuperAdmin, (req, res) => {
 
   db.prepare("UPDATE users SET role = ? WHERE id = ?").run(role, id);
   res.json({ ok: true });
+});
+
+// ========== 删除用户 API ==========
+app.delete("/api/users/:id", requireSuperAdmin, (req, res) => {
+  const id = parseInt(req.params.id);
+  const target = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+  if (!target) return res.status(404).json({ error: "用户不存在" });
+  if (target.role === "superadmin") return res.status(403).json({ error: "不能删除超级管理员" });
+
+  // 删除用户的点赞记录
+  db.prepare("DELETE FROM likes WHERE user_id = ?").run(id);
+  // 删除用户的动态及图片
+  const posts = db.prepare("SELECT * FROM posts WHERE user_id = ?").all(id);
+  for (const post of posts) {
+    if (post.image) fs.unlink(path.join(__dirname, "public", post.image), () => {});
+    if (post.thumbnail) fs.unlink(path.join(__dirname, "public", post.thumbnail), () => {});
+    db.prepare("DELETE FROM likes WHERE post_id = ?").run(post.id);
+  }
+  db.prepare("DELETE FROM posts WHERE user_id = ?").run(id);
+  // 删除用户
+  db.prepare("DELETE FROM users WHERE id = ?").run(id);
+
+  res.json({ message: "用户已删除" });
 });
 
 // ========== 动态 API ==========

@@ -48,6 +48,11 @@
       <input type="password" id="authPassword" placeholder="密码" autocomplete="current-password">
       <div id="nicknameRow" style="display:none;">
         <input type="text" id="authNickname" placeholder="昵称（选填）">
+        <div id="captchaRow" style="display:none;align-items:center;gap:8px;margin-top:4px">
+          <span id="captchaQuestion" style="font-weight:600;white-space:nowrap"></span>
+          <input type="text" id="captchaInput" placeholder="输入答案" style="width:100px" inputmode="numeric">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="refreshCaptcha()" style="white-space:nowrap">换一题</button>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-primary" id="authSubmitBtn" onclick="doLogin()">登录</button>
