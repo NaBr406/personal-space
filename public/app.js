@@ -20,7 +20,14 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   updateUI();
-  loadPosts();
+
+  // 路由解析：如果是 /post/:id 直接显示详情
+  const pathMatch = window.location.pathname.match(/^\/post\/(\d+)$/);
+  if (pathMatch) {
+    showDetail(parseInt(pathMatch[1]));
+  } else {
+    loadPosts();
+  }
 });
 
 // ========== 认证 ==========
@@ -116,6 +123,8 @@ async function doRegister() {
 }
 
 function doLogout() {
+  const token = localStorage.getItem("token");
+  if (token) fetch("/api/logout", { method: "POST", headers: { "Authorization": "Bearer " + token } }).catch(() => {});
   currentUser = null;
   localStorage.removeItem("token");
   updateUI();
@@ -392,7 +401,6 @@ function backToList() {
     feed.innerHTML = "";
     feed.style.opacity = "1";
     feed.style.transform = "translateY(0)";
-    currentPage = 1;
     loadPosts();
     history.pushState(null, "", "/");
     document.title = "我的空间";
@@ -406,7 +414,6 @@ window.addEventListener("popstate", (e) => {
   } else {
     const feed = document.getElementById("feed");
     feed.innerHTML = "";
-    currentPage = 1;
     loadPosts();
     document.title = "我的空间";
     viewMode = "list";
@@ -439,7 +446,7 @@ async function showAdminPanel() {
         <td>
           ${u.role === 'guest' ? `<button class="btn btn-primary btn-sm" onclick="setRole(${u.id}, 'admin')">设为管理员</button>` : ''}
           ${u.role === 'admin' ? `<button class="btn btn-secondary btn-sm" onclick="setRole(${u.id}, 'guest')">取消管理员</button>` : ''}
-          ${u.role !== 'superadmin' ? `<button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-left:4px" onclick="deleteUser(${u.id}, '${u.nickname.replace(/'/g, "\\'")}')">删除</button>` : ''}
+          ${u.role !== 'superadmin' ? `<button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-left:4px" onclick="deleteUser(${u.id}, ${JSON.stringify(u.nickname)})">删除</button>` : ''}
         </td>
       </tr>
     `).join("");

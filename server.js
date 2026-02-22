@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 // ========== 数据库初始化 ==========
 const db = new Database(path.join(__dirname, "data.db"));
 db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
 
 // 用户表
 db.exec(`
@@ -54,6 +55,18 @@ db.exec(`
   )
 `);
 
+
+// 会话表（支持多设备登录）
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    token TEXT UNIQUE NOT NULL,
+    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )
+`);
+
 // 迁移：给旧 posts 表加 user_id
 try { db.exec("ALTER TABLE posts ADD COLUMN user_id INTEGER"); } catch(e) {}
 try { db.exec("ALTER TABLE posts ADD COLUMN thumbnail TEXT"); } catch(e) {}
@@ -62,7 +75,8 @@ try { db.exec("ALTER TABLE users ADD COLUMN register_ip TEXT"); } catch(e) {}
 // 初始化超级管理员
 const superAdmin = db.prepare("SELECT id FROM users WHERE role = 'superadmin'").get();
 if (!superAdmin) {
-  const hash = bcrypt.hashSync("admin123", 10);
+  const adminPwd = process.env.ADMIN_PASSWORD || "admin123";
+  const hash = bcrypt.hashSync(adminPwd, 10);
   db.prepare("INSERT INTO users (username, password_hash, nickname, role) VALUES (?, ?, ?, ?)").run("NaBr406", hash, "NaBr406", "superadmin");
   console.log("✅ 超级管理员已创建 (admin / admin123)");
 }
@@ -148,8 +162,38 @@ function requireSuperAdmin(req, res, next) {
 
 // ========== 认证 API ==========
 
+
+// ========== 频率限制 ==========
+const rateLimitMap = new Map();
+function rateLimit(key, maxAttempts, windowMs) {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now - entry.start > windowMs) {
+    rateLimitMap.set(key, { start: now, count: 1 });
+    return false;
+  }
+  entry.count++;
+  if (entry.count > maxAttempts) return true;
+  return false;
+}
+// 定期清理
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of rateLimitMap) {
+    if (now - v.start > 600000) rateLimitMap.delete(k);
+  }
+}, 300000);
+
 // ========== 验证码 ==========
 const captchaStore = new Map(); // token -> { answer, expires }
+const CAPTCHA_MAX = 5000;
+// 定期清理过期验证码
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of captchaStore) {
+    if (v.expires < now) captchaStore.delete(k);
+  }
+}, 60000);
 
 app.get("/api/captcha", (req, res) => {
   const a = Math.floor(Math.random() * 20) + 1;
@@ -161,6 +205,12 @@ app.get("/api/captcha", (req, res) => {
   const op = ops[Math.floor(Math.random() * ops.length)];
   const x = op.symbol === "-" ? Math.max(a, b) : a;
   const y = op.symbol === "-" ? Math.min(a, b) : b;
+  if (captchaStore.size >= CAPTCHA_MAX) {
+    // 强制清理
+    const now = Date.now();
+    for (const [k, v] of captchaStore) { if (v.expires < now) captchaStore.delete(k); }
+    if (captchaStore.size >= CAPTCHA_MAX) return res.status(429).json({ error: "服务繁忙，请稍后再试" });
+  }
   const question = `${x} ${op.symbol} ${y} = ?`;
   const token = crypto.randomBytes(16).toString("hex");
   captchaStore.set(token, { answer: op.answer, expires: Date.now() + 5 * 60 * 1000 });
@@ -173,6 +223,8 @@ app.get("/api/captcha", (req, res) => {
 
 // 注册
 app.post("/api/register", (req, res) => {
+  const regIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
+  if (rateLimit("register:" + regIp, 5, 60000)) return res.status(429).json({ error: "注册请求过于频繁，请稍后再试" });
   const { captchaToken, captchaAnswer } = req.body;
   if (!captchaToken || captchaAnswer === undefined) return res.status(400).json({ error: "请完成验证码" });
   const cap = captchaStore.get(captchaToken);
@@ -197,7 +249,8 @@ app.post("/api/register", (req, res) => {
   const token = crypto.randomBytes(32).toString("hex");
   const displayName = (nickname || "").trim() || username;
 
-  const result = db.prepare("INSERT INTO users (username, password_hash, nickname, token, register_ip) VALUES (?, ?, ?, ?, ?)").run(username, hash, displayName, token, clientIp);
+  const result = db.prepare("INSERT INTO users (username, password_hash, nickname, register_ip) VALUES (?, ?, ?, ?)").run(username, hash, displayName, clientIp);
+  db.prepare("INSERT INTO sessions (user_id, token) VALUES (?, ?)").run(result.lastInsertRowid, token);
   const user = db.prepare("SELECT id, username, nickname, avatar, role FROM users WHERE id = ?").get(result.lastInsertRowid);
 
   res.status(201).json({ ...user, token });
@@ -205,6 +258,8 @@ app.post("/api/register", (req, res) => {
 
 // 登录
 app.post("/api/login", (req, res) => {
+  const loginIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
+  if (rateLimit("login:" + loginIp, 10, 60000)) return res.status(429).json({ error: "登录尝试过于频繁，请稍后再试" });
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "用户名和密码必填" });
 
@@ -214,7 +269,7 @@ app.post("/api/login", (req, res) => {
   }
 
   const token = crypto.randomBytes(32).toString("hex");
-  db.prepare("UPDATE users SET token = ? WHERE id = ?").run(token, user.id);
+  db.prepare("INSERT INTO sessions (user_id, token) VALUES (?, ?)").run(user.id, token);
 
   res.json({ id: user.id, username: user.username, nickname: user.nickname, avatar: user.avatar, role: user.role, token });
 });
@@ -424,26 +479,36 @@ app.post("/api/posts/:id/like", requireLogin, (req, res) => {
   const post = db.prepare("SELECT id FROM posts WHERE id = ?").get(postId);
   if (!post) return res.status(404).json({ error: "动态不存在" });
 
-  const existing = db.prepare("SELECT id FROM likes WHERE post_id = ? AND user_id = ?").get(postId, req.user.id);
-  if (existing) {
-    db.prepare("DELETE FROM likes WHERE post_id = ? AND user_id = ?").run(postId, req.user.id);
-  } else {
-    db.prepare("INSERT INTO likes (post_id, user_id) VALUES (?, ?)").run(postId, req.user.id);
-  }
+  const toggleLike = db.transaction(() => {
+    const existing = db.prepare("SELECT id FROM likes WHERE post_id = ? AND user_id = ?").get(postId, req.user.id);
+    if (existing) {
+      db.prepare("DELETE FROM likes WHERE post_id = ? AND user_id = ?").run(postId, req.user.id);
+    } else {
+      db.prepare("INSERT OR IGNORE INTO likes (post_id, user_id) VALUES (?, ?)").run(postId, req.user.id);
+    }
+    const count = db.prepare("SELECT COUNT(*) as count FROM likes WHERE post_id = ?").get(postId).count;
+    return { liked: !existing, count };
+  });
+  const result = toggleLike();
+  res.json(result);
+});
 
-  const count = db.prepare("SELECT COUNT(*) as count FROM likes WHERE post_id = ?").get(postId).count;
-  const liked = !existing;
-  res.json({ liked, count });
+
+// 登出
+app.post("/api/logout", (req, res) => {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (token) db.prepare("DELETE FROM sessions WHERE token = ?").run(token);
+  res.json({ message: "已登出" });
 });
 
 // ========== 页面路由 ==========
 app.get("/post/:id", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(__dirname, "public", "detail.html"));
 });
 
 // ========== 错误处理 ==========
 app.use((err, req, res, next) => {
-  if (err.code === "LIMIT_FILE_SIZE") return res.status(400).json({ error: "图片不能超过 5MB" });
+  if (err.code === "LIMIT_FILE_SIZE") return res.status(400).json({ error: "图片不能超过 100MB" });
   console.error("服务器错误:", err.message);
   res.status(500).json({ error: err.message || "服务器内部错误" });
 });
