@@ -538,13 +538,98 @@ body {
 }
 
 /* ========== 响应式 ========== */
+/* ========== 移动端适配 ========== */
 @media (max-width: 480px) {
   .header-inner { padding: 10px 12px; }
-  .logo { font-size: 1.1rem; }
-  .card { padding: 16px; border-radius: 8px; }
-  .feed { padding: 12px; gap: 12px; }
+  .logo { font-size: 1rem; }
+  .logo svg { width: 16px; height: 16px; }
+  .card { padding: 14px; border-radius: 8px; }
+  .feed { padding: 10px; gap: 10px; }
   .header-nickname { display: none; }
-  .search-drawer-inner { gap: 8px; }
+
+  /* 导航按钮紧凑 */
+  .header-actions { gap: 4px; }
+  .header-actions .btn { padding: 5px 10px; font-size: 0.75rem; }
+  .btn-icon { padding: 6px; }
+
+  /* 搜索栏竖排 */
+  .search-drawer-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .search-drawer-inner label {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .search-drawer-inner input[type="date"] {
+    flex: 1;
+  }
+  .search-drawer.open { max-height: 200px; }
+
+  /* 发布区域 */
+  .publish-area { padding: 0 10px; margin-top: 10px; }
+  .publish-card textarea { font-size: 0.9rem; min-height: 50px; }
+  .publish-footer { flex-wrap: wrap; gap: 8px; }
+  .image-preview img { max-width: 150px; max-height: 150px; }
+
+  /* 帖子卡片 */
+  .post-content { font-size: 0.9rem; line-height: 1.7; }
+  .post-image img { max-height: 300px; border-radius: 6px; }
+  .post-author img { width: 30px; height: 30px; }
+  .post-author .author-name { font-size: 0.82rem; }
+  .post-footer { gap: 8px; font-size: 0.75rem; flex-wrap: wrap; }
+  .btn-like { padding: 3px 8px; font-size: 0.75rem; }
+  .btn-delete { font-size: 0.75rem; padding: 3px 6px; }
+
+  /* 弹窗 */
+  .modal { padding: 20px; width: 94%; max-width: none; }
+  .modal h3 { font-size: 1rem; margin-bottom: 12px; }
+  .modal input { padding: 9px 10px; font-size: 13px; }
+  .modal-actions button { padding: 9px; font-size: 13px; }
+  .auth-switch { font-size: 12px; }
+
+  /* 管理面板表格 */
+  .admin-table { font-size: 0.78rem; }
+  .admin-table th, .admin-table td { padding: 8px 4px; }
+  .admin-table th:first-child,
+  .admin-table td:first-child { display: none; } /* 隐藏头像列 */
+  .admin-avatar { width: 28px !important; height: 28px !important; }
+  .role-badge { font-size: 0.65rem; padding: 1px 6px; }
+  .admin-table .btn { font-size: 0.7rem; padding: 3px 6px; white-space: nowrap; }
+
+  /* 详情页 */
+  .detail-card { padding: 14px; }
+  .detail-content { font-size: 0.9rem; }
+
+  /* 个人资料弹窗 */
+  .profile-avatar { width: 60px !important; height: 60px !important; }
+
+  /* 分页 */
+  .pagination { gap: 4px; flex-wrap: wrap; justify-content: center; }
+  .pagination button { padding: 5px 10px; font-size: 0.8rem; }
+
+  /* FAB */
+  .fab { width: 48px; height: 48px; bottom: 16px; right: 16px; }
+
+  /* Toast */
+  .toast { font-size: 13px; padding: 8px 16px; max-width: 90vw; }
+
+  /* 图片灯箱 */
+  .lightbox img { max-width: 95vw; max-height: 85vh; }
+}
+
+/* 超小屏幕 */
+@media (max-width: 360px) {
+  .header-inner { padding: 8px 10px; }
+  .logo { font-size: 0.9rem; }
+  .card { padding: 12px; }
+  .feed { padding: 8px; gap: 8px; }
+  .post-footer { gap: 6px; }
+  .modal { padding: 16px; }
+  .admin-table th:nth-child(3),
+  .admin-table td:nth-child(3) { display: none; } /* 隐藏用户名列 */
 }
 
 /* 用户管理头像尺寸限制 */
