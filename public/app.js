@@ -55,7 +55,7 @@ function showAuthModal(mode) {
   document.getElementById("nicknameRow").style.display = mode === "login" ? "none" : "block";
   document.getElementById("inviteRow").style.display = mode === "login" ? "none" : "block";
   document.getElementById("authSwitch").innerHTML = mode === "login"
-    ? '没有账号？<a href="javascript:void(0)" onclick="showAuthModal(\'register\')">去注册</a>'
+    ? '没有账号？<a href="javascript:void(0)" onclick="showAuthModal(\'register\')">去注册</a> &nbsp;&nbsp; <a href="javascript:void(0)" onclick="closeAuthModal();showResetModal()" style="color:var(--muted);font-size:0.9em">忘记密码?</a>'
     : '已有账号？<a href="javascript:void(0)" onclick="showAuthModal(\'login\')">去登录</a>';
   document.getElementById("authModal").classList.add("show");
   document.getElementById("authUsername").value = "";
@@ -260,6 +260,7 @@ function createPostCard(post) {
     <div class="post-footer">
       <span class="post-time">${formatTime(post.created_at)}</span>
       <span class="post-views"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> ${post.views || 0}</span>
+      <button class="btn-comment" onclick="event.stopPropagation();showDetail(${post.id})" style="background:none;border:none;cursor:pointer;color:var(--text-secondary);display:inline-flex;align-items:center;gap:3px;font-size:0.9em"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> <span>${post.comment_count || 0}</span></button>
       ${likeBtn}
       ${deleteBtn}
     </div>
@@ -392,7 +393,29 @@ async function showDetail(id) {
       </div>
     `;
 
-    detailView.style.opacity = "0";
+
+    // 评论区
+    const commentSection = document.createElement("div");
+    commentSection.className = "comment-section";
+
+    let commentInputHtml = "";
+    if (currentUser) {
+      commentInputHtml = `
+        <div class="comment-input">
+          <input type="text" id="commentInput" placeholder="写评论..." maxlength="500" onkeydown="if(event.key==='Enter')submitComment(${post.id})">
+          <button class="btn btn-primary btn-sm" onclick="submitComment(${post.id})">发送</button>
+        </div>`;
+    }
+
+    commentSection.innerHTML = `
+      <h4>💬 评论</h4>
+      ${commentInputHtml}
+      <div id="commentList"><div class="comment-empty">加载评论中...</div></div>
+    `;
+    detailView.appendChild(commentSection);
+    loadComments(post.id);
+
+        detailView.style.opacity = "0";
     detailView.style.transform = "translateY(8px)";
     detailView.style.transition = "opacity 0.25s ease, transform 0.25s ease";
     requestAnimationFrame(() => {
@@ -463,17 +486,23 @@ async function showAdminPanel() {
     const users = await res.json();
 
     let rows = users.map(u => `
-      <tr>
-        <td><img src="${escapeHtml(u.avatar || '/default-avatar.png')}" class="admin-avatar"></td>
-        <td>${escapeHtml(u.nickname)}</td>
-        <td>${escapeHtml(u.username)}</td>
-        <td><span class="role-badge role-${u.role}">${u.role === 'superadmin' ? '超管' : u.role === 'admin' ? '管理员' : '游客'}</span></td>
-        <td>
+      <div class="admin-user-card">
+        <div class="admin-user-info">
+          <img src="${escapeHtml(u.avatar || '/default-avatar.png')}" class="admin-avatar">
+          <div class="admin-user-detail">
+            <div class="admin-user-name">${escapeHtml(u.nickname)}</div>
+            <div class="admin-user-username">@${escapeHtml(u.username)}</div>
+          </div>
+          <span class="role-badge role-${u.role}">${u.role === 'superadmin' ? '超管' : u.role === 'admin' ? '管理员' : '游客'}</span>
+        </div>
+        ${u.role !== 'superadmin' ? `<div class="admin-user-actions">
           ${u.role === 'guest' ? `<button class="btn btn-primary btn-sm" onclick="setRole(${u.id}, 'admin')">设为管理员</button>` : ''}
           ${u.role === 'admin' ? `<button class="btn btn-secondary btn-sm" onclick="setRole(${u.id}, 'guest')">取消管理员</button>` : ''}
-          ${u.role !== 'superadmin' ? `<button class="btn btn-sm" style="background:#ef4444;color:#fff;margin-left:4px" onclick="deleteUser(${u.id})" data-nickname="${escapeHtml(u.nickname)}">删除</button>` : ''}
-        </td>
-      </tr>
+          <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})" data-nickname="${escapeHtml(u.nickname)}">删除</button>
+          <button class="btn btn-sm btn-warn" onclick="genResetCode(${u.id})">校验码</button>
+          <span id="rc-${u.id}" class="reset-code-display"></span>
+        </div>` : ''}
+      </div>
     `).join("");
 
     // 获取邀请码
@@ -494,10 +523,7 @@ async function showAdminPanel() {
       ${inviteHtml}
       <div class="card" style="overflow-x:auto">
         <h3 style="margin-bottom:16px">用户管理</h3>
-        <table class="admin-table">
-          <thead><tr><th>头像</th><th>昵称</th><th>用户名</th><th>角色</th><th>操作</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <div class="admin-user-list">${rows}</div>
       </div>
     `;
 
@@ -515,6 +541,30 @@ async function setRole(userId, role) {
     if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
     showToast("已更新");
     showAdminPanel();
+  } catch (err) { showToast(err.message); }
+}
+
+
+async function genResetCode(userId) {
+  try {
+    const getRes = await fetch(`/api/users/${userId}/reset-code`, {
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    if (getRes.ok) {
+      const data = await getRes.json();
+      if (data.code) {
+        document.getElementById("rc-" + userId).textContent = data.code;
+        return;
+      }
+    }
+    const res = await fetch(`/api/users/${userId}/reset-code`, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    const result = await res.json();
+    document.getElementById("rc-" + userId).textContent = result.code;
+    showToast("校验码已生成");
   } catch (err) { showToast(err.message); }
 }
 
@@ -551,6 +601,7 @@ async function deleteUser(userId) {
 
 // ========== 修改个人信息 ==========
 function showProfile() {
+  document.getElementById("profileAvatar").src = currentUser.avatar || "/default-avatar.png";
   document.getElementById("profileModal").classList.add("show");
   document.getElementById("profileNickname").value = currentUser.nickname;
 }
@@ -646,6 +697,155 @@ function showToast(msg) {
   t.textContent = msg;
   t.classList.add("show");
   setTimeout(() => t.classList.remove("show"), 2500);
+}
+
+
+async function resetPassword() {
+  const username = document.getElementById("resetUsername").value.trim();
+  const code = document.getElementById("resetCode").value.trim();
+  const newPwd = document.getElementById("resetNewPwd").value.trim();
+  if (!username || !code || !newPwd) { showToast("请填写完整"); return; }
+  try {
+    const res = await fetch("/api/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, code, newPassword: newPwd })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    showToast("密码已重置，请登录");
+    closeResetModal();
+  } catch (err) { showToast(err.message); }
+}
+
+function showResetModal() {
+  document.getElementById("resetModal").classList.add("show");
+}
+
+function closeResetModal() {
+  document.getElementById("resetModal").classList.remove("show");
+  document.getElementById("resetUsername").value = "";
+  document.getElementById("resetCode").value = "";
+  document.getElementById("resetNewPwd").value = "";
+}
+
+
+async function loadComments(postId) {
+  try {
+    const res = await fetch(`/api/posts/${postId}/comments`);
+    const comments = await res.json();
+    const list = document.getElementById("commentList");
+    if (!comments.length) {
+      list.innerHTML = '<div class="comment-empty">暂无评论，来说点什么吧 ✨</div>';
+      return;
+    }
+    list.innerHTML = comments.map(c => {
+      const canDelete = currentUser && (currentUser.id === c.user_id || currentUser.role === "superadmin" || currentUser.role === "admin");
+      const deleteBtn = canDelete ? `<button class="comment-delete" onclick="deleteComment(${c.id}, ${postId})">删除</button>` : "";
+      return `<div class="comment-item">
+        <img src="${escapeHtml(c.avatar || '/default-avatar.png')}" class="comment-avatar">
+        <div class="comment-body">
+          <div class="comment-header">
+            <span class="comment-author">${escapeHtml(c.nickname || '匿名')}</span>
+            <span class="comment-time">${formatTime(c.created_at)}</span>
+            ${deleteBtn}
+          </div>
+          <div class="comment-text">${escapeHtml(c.content)}</div>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    document.getElementById("commentList").innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center">加载评论失败</div>';
+  }
+}
+
+async function submitComment(postId) {
+  const input = document.getElementById("commentInput");
+  const content = input.value.trim();
+  if (!content) return;
+  try {
+    const res = await fetch(`/api/posts/${postId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + currentUser.token },
+      body: JSON.stringify({ content })
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    input.value = "";
+    loadComments(postId);
+    showToast("评论成功");
+  } catch (err) { showToast(err.message); }
+}
+
+async function deleteComment(commentId, postId) {
+  if (!confirm("确定删除这条评论？")) return;
+  try {
+    const res = await fetch(`/api/comments/${commentId}`, {
+      method: "DELETE",
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    loadComments(postId);
+    showToast("评论已删除");
+  } catch (err) { showToast(err.message); }
+}
+
+// ========== 通知 ==========
+async function loadNotifications() {
+  if (!currentUser) return;
+  try {
+    const res = await fetch("/api/notifications/unread-count", {
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    const data = await res.json();
+    const badge = document.getElementById("notifBadge");
+    if (badge) {
+      badge.textContent = data.count > 0 ? data.count : "";
+      badge.style.display = data.count > 0 ? "inline-block" : "none";
+    }
+  } catch (err) {}
+}
+
+async function showNotifications() {
+  const modal = document.getElementById("notifModal");
+  modal.classList.add("show");
+  const list = document.getElementById("notifList");
+  list.innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-secondary)">加载中...</div>';
+
+  try {
+    // 标记全部已读
+    await fetch("/api/notifications/read-all", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    loadNotifications();
+
+    const res = await fetch("/api/notifications", {
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    const notifs = await res.json();
+    if (!notifs.length) {
+      list.innerHTML = '<div class="comment-empty">暂无通知 🔔</div>';
+      return;
+    }
+    list.innerHTML = notifs.map(n => {
+      const icon = n.type === "like" ? "❤️" : "💬";
+      const text = n.type === "like" ? "赞了你的动态" : `评论了你的动态: ${escapeHtml((n.content || "").slice(0, 50))}`;
+      const readClass = n.is_read ? " read" : "";
+      return `<div class="notif-item${readClass}" onclick="closeNotifModal();${n.post_id ? 'showDetail(' + n.post_id + ')' : ''}">
+        <img src="${escapeHtml(n.from_avatar || '/default-avatar.png')}" class="notif-avatar">
+        <div class="notif-body">
+          <div class="notif-text"><strong>${escapeHtml(n.from_nickname || '系统')}</strong> ${icon} ${text}</div>
+          <div class="notif-time">${formatTime(n.created_at)}</div>
+        </div>
+      </div>`;
+    }).join("");
+  } catch (err) {
+    list.innerHTML = '<div style="color:#ef4444;padding:30px;text-align:center">加载失败</div>';
+  }
+}
+
+function closeNotifModal() {
+  document.getElementById("notifModal").classList.remove("show");
 }
 
 function previewProfileAvatar(input) {

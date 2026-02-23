@@ -37,7 +37,7 @@ db.exec(`
     image TEXT,
     user_id INTEGER,
     views INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   )
 `);
@@ -48,7 +48,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     post_id INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
-    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(post_id, user_id),
     FOREIGN KEY (post_id) REFERENCES posts(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
@@ -62,7 +62,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     token_hash TEXT UNIQUE NOT NULL,
-    created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )
 `);
@@ -75,6 +75,44 @@ db.exec(`CREATE TABLE IF NOT EXISTS invite_codes (
   used_by INTEGER,
   used_at DATETIME,
   FOREIGN KEY (used_by) REFERENCES users(id)
+)`);
+
+
+// 评论表
+db.exec(`CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  post_id INTEGER NOT NULL,
+  user_id INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)`);
+
+// 消息通知表
+db.exec(`CREATE TABLE IF NOT EXISTS notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  from_user_id INTEGER,
+  post_id INTEGER,
+  comment_id INTEGER,
+  content TEXT,
+  is_read INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE
+)`);
+
+// 密码重置校验码表
+db.exec(`CREATE TABLE IF NOT EXISTS password_reset_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  code TEXT UNIQUE NOT NULL,
+  used INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 )`);
 
 // 每天自动生成邀请码
@@ -407,9 +445,12 @@ app.delete("/api/users/:id", requireSuperAdmin, (req, res) => {
   // 删除用户（事务保护）
   const posts = db.prepare("SELECT * FROM posts WHERE user_id = ?").all(id);
   const deleteUserTx = db.transaction(() => {
+    db.prepare("DELETE FROM notifications WHERE user_id = ? OR from_user_id = ?").run(id, id);
+    db.prepare("DELETE FROM comments WHERE user_id = ?").run(id);
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(id);
     db.prepare("DELETE FROM likes WHERE user_id = ?").run(id);
     for (const post of posts) {
+      db.prepare("DELETE FROM comments WHERE post_id = ?").run(post.id);
       db.prepare("DELETE FROM likes WHERE post_id = ?").run(post.id);
     }
     db.prepare("DELETE FROM posts WHERE user_id = ?").run(id);
@@ -450,7 +491,8 @@ app.get("/api/posts", (req, res) => {
 
   const posts = db.prepare(`
     SELECT p.*, u.nickname as author_name, u.avatar as author_avatar,
-    (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count
+    (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
+    (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count
     FROM posts p LEFT JOIN users u ON p.user_id = u.id
     ${where} ORDER BY p.created_at DESC LIMIT ? OFFSET ?
   `).all(...params, limit, offset);
@@ -473,7 +515,8 @@ app.get("/api/posts/:id", (req, res) => {
   const id = parseInt(req.params.id);
   const post = db.prepare(`
     SELECT p.*, u.nickname as author_name, u.avatar as author_avatar,
-    (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count
+    (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
+    (SELECT COUNT(*) FROM comments WHERE post_id = p.id) as comment_count
     FROM posts p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?
   `).get(id);
   if (!post) return res.status(404).json({ error: "动态不存在" });
@@ -558,6 +601,132 @@ app.post("/api/posts/:id/like", requireLogin, (req, res) => {
 });
 
 
+
+// 生成密码重置校验码（超管）
+app.post("/api/users/:id/reset-code", requireSuperAdmin, (req, res) => {
+  const userId = parseInt(req.params.id);
+  const user = db.prepare("SELECT id FROM users WHERE id = ?").get(userId);
+  if (!user) return res.status(404).json({ error: "用户不存在" });
+  db.prepare("UPDATE password_reset_codes SET used = 1 WHERE user_id = ? AND used = 0").run(userId);
+  const code = crypto.randomBytes(4).toString("hex").toUpperCase();
+  db.prepare("INSERT INTO password_reset_codes (user_id, code) VALUES (?, ?)").run(userId, code);
+  res.json({ code });
+});
+
+// 获取用户的有效校验码（超管）
+app.get("/api/users/:id/reset-code", requireSuperAdmin, (req, res) => {
+  const userId = parseInt(req.params.id);
+  const row = db.prepare("SELECT code FROM password_reset_codes WHERE user_id = ? AND used = 0 ORDER BY id DESC LIMIT 1").get(userId);
+  res.json({ code: row ? row.code : null });
+});
+
+// 用校验码重置密码（无需登录）
+app.post("/api/reset-password", (req, res) => {
+  const { username, code, newPassword } = req.body;
+  if (!username || !code || !newPassword) return res.status(400).json({ error: "请填写完整" });
+  if (newPassword.length < 4) return res.status(400).json({ error: "密码至少 4 位" });
+  const user = db.prepare("SELECT id FROM users WHERE username = ?").get(username);
+  if (!user) return res.status(404).json({ error: "用户不存在" });
+  const resetCode = db.prepare("SELECT id FROM password_reset_codes WHERE user_id = ? AND code = ? AND used = 0").get(user.id, code.toUpperCase());
+  if (!resetCode) return res.status(403).json({ error: "校验码无效或已使用" });
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, user.id);
+  db.prepare("UPDATE password_reset_codes SET used = 1 WHERE id = ?").run(resetCode.id);
+  res.json({ ok: true });
+});
+
+
+// ========== 评论 API ==========
+
+// 获取动态的评论
+app.get("/api/posts/:id/comments", (req, res) => {
+  const postId = parseInt(req.params.id);
+  const comments = db.prepare(`
+    SELECT c.*, u.nickname, u.avatar
+    FROM comments c LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.post_id = ? ORDER BY c.created_at ASC
+  `).all(postId);
+  res.json(comments);
+});
+
+// 发表评论
+app.post("/api/posts/:id/comments", requireLogin, (req, res) => {
+  const postId = parseInt(req.params.id);
+  const { content } = req.body;
+  if (!content || !content.trim()) return res.status(400).json({ error: "评论内容不能为空" });
+  if (content.length > 500) return res.status(400).json({ error: "评论不能超过 500 字" });
+
+  const post = db.prepare("SELECT id, user_id FROM posts WHERE id = ?").get(postId);
+  if (!post) return res.status(404).json({ error: "动态不存在" });
+
+  const result = db.prepare("INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)").run(postId, req.user.id, content.trim());
+
+  // 通知动态作者（不通知自己）
+  if (post.user_id && post.user_id !== req.user.id) {
+    db.prepare("INSERT INTO notifications (user_id, type, from_user_id, post_id, comment_id, content) VALUES (?, 'comment', ?, ?, ?, ?)").run(
+      post.user_id, req.user.id, postId, result.lastInsertRowid, content.trim().slice(0, 100)
+    );
+  }
+
+  const comment = db.prepare(`
+    SELECT c.*, u.nickname, u.avatar
+    FROM comments c LEFT JOIN users u ON c.user_id = u.id
+    WHERE c.id = ?
+  `).get(result.lastInsertRowid);
+
+  res.json(comment);
+});
+
+// 删除评论（作者或超管）
+app.delete("/api/comments/:id", requireLogin, (req, res) => {
+  const commentId = parseInt(req.params.id);
+  const comment = db.prepare("SELECT * FROM comments WHERE id = ?").get(commentId);
+  if (!comment) return res.status(404).json({ error: "评论不存在" });
+  if (comment.user_id !== req.user.id && req.user.role !== "superadmin" && req.user.role !== "admin") {
+    return res.status(403).json({ error: "无权删除" });
+  }
+  db.prepare("DELETE FROM notifications WHERE comment_id = ?").run(commentId);
+  db.prepare("DELETE FROM comments WHERE id = ?").run(commentId);
+  res.json({ ok: true });
+});
+
+// ========== 通知 API ==========
+
+// 获取通知列表
+app.get("/api/notifications", requireLogin, (req, res) => {
+  const notifications = db.prepare(`
+    SELECT n.*, u.nickname as from_nickname, u.avatar as from_avatar,
+    p.content as post_content
+    FROM notifications n
+    LEFT JOIN users u ON n.from_user_id = u.id
+    LEFT JOIN posts p ON n.post_id = p.id
+    WHERE n.user_id = ?
+    ORDER BY n.created_at DESC
+    LIMIT 50
+  `).all(req.user.id);
+  res.json(notifications);
+});
+
+// 未读通知数
+app.get("/api/notifications/unread-count", requireLogin, (req, res) => {
+  const row = db.prepare("SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0").get(req.user.id);
+  res.json({ count: row.count });
+});
+
+// 标记全部已读
+app.post("/api/notifications/read-all", requireLogin, (req, res) => {
+  db.prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0").run(req.user.id);
+  res.json({ ok: true });
+});
+
+// 标记单条已读
+app.post("/api/notifications/:id/read", requireLogin, (req, res) => {
+  const id = parseInt(req.params.id);
+  db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?").run(id, req.user.id);
+  res.json({ ok: true });
+});
+
+// 点赞时也发通知
 // 登出
 app.post("/api/logout", (req, res) => {
   const token = req.headers.authorization?.replace("Bearer ", "");

@@ -717,3 +717,380 @@ body {
   width: 1.2em;
   height: 1.2em;
 }
+
+
+/* ========== 评论区 ========== */
+.comment-section {
+  margin-top: 16px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+.comment-section h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-input {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.comment-input input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9em;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.comment-input input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.comment-input input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+.comment-input .btn {
+  border-radius: 20px;
+  padding: 8px 18px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.comment-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.comment-item:last-child {
+  border-bottom: none;
+}
+
+.comment-item:hover {
+  background: rgba(0,0,0,0.015);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 8px;
+}
+
+.comment-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1.5px solid var(--border);
+}
+
+.comment-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.comment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.comment-author {
+  font-weight: 600;
+  font-size: 0.88em;
+  color: var(--text);
+}
+
+.comment-time {
+  font-size: 0.78em;
+  color: var(--text-secondary);
+}
+
+.comment-delete {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.78em;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.comment-item:hover .comment-delete {
+  opacity: 0.7;
+}
+
+.comment-delete:hover {
+  opacity: 1 !important;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.comment-text {
+  font-size: 0.93em;
+  color: var(--text);
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.comment-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 30px 20px;
+  font-size: 0.9em;
+}
+
+/* ========== 通知弹窗 ========== */
+.notif-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: 8px;
+}
+
+.notif-item:hover {
+  background: rgba(0,0,0,0.02);
+}
+
+.notif-item:last-child {
+  border-bottom: none;
+}
+
+.notif-item.read {
+  opacity: 0.55;
+}
+
+.notif-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1.5px solid var(--border);
+}
+
+.notif-body {
+  flex: 1;
+}
+
+.notif-text {
+  font-size: 0.93em;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.notif-text strong {
+  font-weight: 600;
+}
+
+.notif-time {
+  font-size: 0.78em;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* 通知铃铛 */
+.notif-bell {
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  color: var(--text);
+  padding: 6px;
+  border-radius: 50%;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.notif-bell:hover {
+  background: var(--bg);
+}
+
+.notif-badge {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.65em;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  text-align: center;
+  line-height: 16px;
+  font-weight: 700;
+  border: 2px solid var(--card-bg);
+}
+
+
+/* ========== 用户管理卡片 ========== */
+.admin-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-user-card {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 14px;
+  transition: box-shadow 0.2s;
+}
+
+.admin-user-card:hover {
+  box-shadow: var(--shadow-hover);
+}
+
+.admin-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+}
+
+.admin-user-detail {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-user-name {
+  font-weight: 600;
+  font-size: 0.95em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-username {
+  font-size: 0.82em;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+}
+
+.admin-user-actions .btn-sm {
+  font-size: 0.8em;
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+
+.btn-danger {
+  background: #ef4444 !important;
+  color: #fff !important;
+}
+
+.btn-danger:hover {
+  background: #dc2626 !important;
+}
+
+.btn-warn {
+  background: #f59e0b !important;
+  color: #fff !important;
+}
+
+.btn-warn:hover {
+  background: #d97706 !important;
+}
+
+.reset-code-display {
+  font-weight: 700;
+  color: var(--primary);
+  letter-spacing: 1.5px;
+  font-size: 0.95em;
+}
+
+.role-badge {
+  font-size: 0.75em;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.role-superadmin {
+  background: linear-gradient(135deg, var(--primary), #7c3aed);
+  color: #fff;
+}
+
+.role-admin {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.role-guest {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* 手机端适配 */
+@media (max-width: 480px) {
+  .admin-user-info {
+    gap: 10px;
+  }
+
+  .admin-avatar {
+    width: 38px;
+    height: 38px;
+  }
+
+  .admin-user-name {
+    font-size: 0.9em;
+  }
+
+  .admin-user-actions {
+    gap: 5px;
+  }
+
+  .admin-user-actions .btn-sm {
+    font-size: 0.75em;
+    padding: 4px 10px;
+  }
+}
