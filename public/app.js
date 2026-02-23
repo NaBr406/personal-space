@@ -22,9 +22,9 @@ document.addEventListener("DOMContentLoaded", () => {
   updateUI();
 
   // 路由解析：如果是 /post/:id 直接显示详情
-  const pathMatch = window.location.pathname.match(/^\/post\/(\d+)$/);
+  const pathMatch = window.location.pathname.match(/^\/(space\/)?post\/(\d+)$/);
   if (pathMatch) {
-    showDetail(parseInt(pathMatch[1]));
+    showDetail(parseInt(pathMatch[2]));
   } else {
     loadPosts();
   }
@@ -423,7 +423,7 @@ async function showDetail(id) {
       detailView.style.transform = "translateY(0)";
     });
 
-    history.pushState({ detail: id }, "", "/post/" + id);
+    history.pushState({ detail: id }, "", "/space/post/" + id);
     document.title = (post.content ? post.content.slice(0, 30) : "图片动态") + " - 我的空间";
     viewMode = "detail";
   } catch (err) {
@@ -442,7 +442,7 @@ function backToList() {
   if (loadMore) loadMore.style.display = "";
   const fab = document.getElementById("fab");
   if (fab) fab.style.display = "";
-  history.pushState(null, "", "/");
+  history.pushState(null, "", "/space/");
   document.title = "我的空间";
 }
 

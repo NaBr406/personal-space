@@ -742,6 +742,11 @@ app.get("/post/:id", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// ========== SPA fallback ==========
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // ========== 错误处理 ==========
 app.use((err, req, res, next) => {
   if (err.code === "LIMIT_FILE_SIZE") return res.status(400).json({ error: "图片不能超过 100MB" });
