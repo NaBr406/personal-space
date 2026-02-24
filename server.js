@@ -44,6 +44,16 @@ db.exec(`
   )
 `);
 
+// 访客记录表
+db.exec(`CREATE TABLE IF NOT EXISTS visitors (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER,
+  ip TEXT,
+  user_agent TEXT,
+  visited_at DATETIME DEFAULT (datetime('now','localtime')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+)`);
+
 // 迁移：添加 images/thumbnails 列
 try { db.exec("ALTER TABLE posts ADD COLUMN images TEXT"); } catch(e) {}
 try { db.exec("ALTER TABLE posts ADD COLUMN thumbnails TEXT"); } catch(e) {}
@@ -848,6 +858,38 @@ app.post("/api/logout", (req, res) => {
     db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(logoutHash);
   }
   res.json({ message: "已登出" });
+});
+
+// ========== 访客记录 ==========
+
+// 记录访问（任何人）
+app.post("/api/visit", (req, res) => {
+  const user = getUser(req);
+  const ip = req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.connection.remoteAddress || "";
+  const realIp = ip.split(",")[0].trim().replace("::ffff:", "");
+  const ua = (req.headers["user-agent"] || "").slice(0, 200);
+  // 5分钟内同一用户/IP只记录一次
+  const recent = user
+    ? db.prepare("SELECT 1 FROM visitors WHERE user_id = ? AND visited_at > datetime('now','localtime','-5 minutes')").get(user.id)
+    : db.prepare("SELECT 1 FROM visitors WHERE user_id IS NULL AND ip = ? AND visited_at > datetime('now','localtime','-5 minutes')").get(realIp);
+  if (!recent) {
+    db.prepare("INSERT INTO visitors (user_id, ip, user_agent) VALUES (?, ?, ?)").run(user ? user.id : null, realIp, ua);
+  }
+  res.json({ ok: true });
+});
+
+// 查询访客（超管）
+app.get("/api/visitors", requireSuperAdmin, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+  const visitors = db.prepare(`
+    SELECT v.id, v.user_id, v.ip, v.visited_at,
+      u.nickname, u.avatar
+    FROM visitors v
+    LEFT JOIN users u ON v.user_id = u.id
+    ORDER BY v.visited_at DESC
+    LIMIT ?
+  `).all(limit);
+  res.json(visitors);
 });
 
 // ========== 页面路由 ==========

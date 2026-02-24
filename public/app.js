@@ -31,6 +31,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   updateUI();
   if (currentUser) startNotifPolling();
+  reportVisit();
+  loadVisitors();
 
   // 路由解析：如果是 /post/:id 直接显示详情
   const pathMatch = window.location.pathname.match(/^\/(space\/)?post\/(\d+)$/);
@@ -989,6 +991,57 @@ async function deleteComment(commentId, postId) {
     loadComments(postId);
     showToast("评论已删除");
   } catch (err) { showToast(err.message); }
+}
+
+// ========== 访客记录 ==========
+
+// 上报访问
+function reportVisit() {
+  const headers = {};
+  if (currentUser) headers["Authorization"] = "Bearer " + currentUser.token;
+  fetch("/api/visit", { method: "POST", headers }).catch(() => {});
+}
+
+// 超管：加载访客列表
+async function loadVisitors() {
+  if (!currentUser || currentUser.role !== "superadmin") return;
+  try {
+    const res = await fetch("/api/visitors?limit=30", {
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    const visitors = await res.json();
+    const panel = document.getElementById("visitorPanel");
+    if (!panel) return;
+    panel.style.display = "block";
+
+    const list = document.getElementById("visitorList");
+    if (!visitors.length) {
+      list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-secondary);font-size:0.85rem">暂无访客记录</div>';
+      return;
+    }
+
+    list.innerHTML = visitors.map(v => {
+      const time = formatTime(v.visited_at);
+      if (v.user_id && v.nickname) {
+        const avatar = v.avatar || '/default-avatar.png';
+        return `<div class="visitor-item">
+          <img src="${escapeHtml(avatar)}" class="visitor-avatar">
+          <div class="visitor-info">
+            <span class="visitor-name">${escapeHtml(v.nickname)}</span>
+            <span class="visitor-time">${time}</span>
+          </div>
+        </div>`;
+      } else {
+        return `<div class="visitor-item">
+          <div class="visitor-ip-icon">👤</div>
+          <div class="visitor-info">
+            <span class="visitor-name visitor-ip">${escapeHtml(v.ip || '未知')}</span>
+            <span class="visitor-time">${time}</span>
+          </div>
+        </div>`;
+      }
+    }).join("");
+  } catch (err) {}
 }
 
 // ========== 通知 ==========
