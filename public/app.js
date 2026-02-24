@@ -8,16 +8,14 @@ let searchEnd = "";
 let viewMode = "list"; // list | detail | admin
 
 // ========== 初始化 ==========
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const token = localStorage.getItem("token");
   if (token) {
-    fetchMe(token).then(user => {
-      if (user) {
-        currentUser = user;
-        currentUser.token = token;
-        updateUI();
-      }
-    });
+    const user = await fetchMe(token);
+    if (user) {
+      currentUser = user;
+      currentUser.token = token;
+    }
   }
   updateUI();
 
@@ -225,6 +223,46 @@ function recordView(postId) {
   fetch(`/api/posts/${postId}/view`, { method: "POST" }).catch(() => {});
 }
 
+
+function buildImageGrid(post, maxH) {
+  let imgs = [];
+  let thumbs = [];
+  try { if (post.images) imgs = JSON.parse(post.images); } catch(e) {}
+  try { if (post.thumbnails) thumbs = JSON.parse(post.thumbnails); } catch(e) {}
+  // fallback to single image
+  if (!imgs.length && post.image) { imgs = [post.image]; thumbs = [post.thumbnail || post.image]; }
+  if (!imgs.length) return "";
+  const count = imgs.length;
+  const cls = count === 1 ? "img-grid-1" : count <= 3 ? "img-grid-3" : "img-grid-4";
+  const items = imgs.map((img, i) => {
+    const thumb = thumbs[i] || img;
+    return `<div class="img-grid-item" onclick="viewImages(${JSON.stringify(imgs).replace(/"/g, '&quot;')}, ${i})"><img src="${escapeHtml(thumb)}" alt="" loading="lazy"></div>`;
+  }).join("");
+  return `<div class="img-grid ${cls}">${items}</div>`;
+}
+
+function viewImages(imgs, startIdx) {
+  let idx = startIdx || 0;
+  const overlay = document.createElement("div");
+  overlay.className = "img-viewer-overlay";
+  const render = () => {
+    overlay.innerHTML = `
+      <div class="img-viewer-close" onclick="this.parentElement.remove()">✕</div>
+      <div class="img-viewer-counter">${idx+1} / ${imgs.length}</div>
+      ${imgs.length > 1 ? '<div class="img-viewer-prev" onclick="event.stopPropagation()">‹</div>' : ''}
+      ${imgs.length > 1 ? '<div class="img-viewer-next" onclick="event.stopPropagation()">›</div>' : ''}
+      <img src="${imgs[idx]}" class="img-viewer-img" onclick="event.stopPropagation()">
+    `;
+    if (imgs.length > 1) {
+      overlay.querySelector('.img-viewer-prev').onclick = (e) => { e.stopPropagation(); idx = (idx - 1 + imgs.length) % imgs.length; render(); };
+      overlay.querySelector('.img-viewer-next').onclick = (e) => { e.stopPropagation(); idx = (idx + 1) % imgs.length; render(); };
+    }
+  };
+  overlay.onclick = () => overlay.remove();
+  document.body.appendChild(overlay);
+  render();
+}
+
 function createPostCard(post) {
   const card = document.createElement("div");
   card.className = "card post-card";
@@ -236,7 +274,7 @@ function createPostCard(post) {
   });
 
   let contentHtml = post.content ? `<div class="post-content">${escapeHtml(post.content)}</div>` : "";
-  let imageHtml = post.image ? `<div class="post-image"><img src="${escapeHtml(post.thumbnail || post.image)}" alt="图片" loading="lazy" onclick="recordView(${post.id}); window.open('${escapeHtml(post.image)}')"></div>` : "";
+  let imageHtml = buildImageGrid(post, 300);
 
   // 发布者信息
   let authorHtml = "";
@@ -288,16 +326,19 @@ async function toggleLike(postId, btn) {
 // ========== 发布动态 ==========
 async function submitPost() {
   const content = document.getElementById("postContent").value.trim();
-  const imageInput = document.getElementById("postImage");
+  const imageInput = document.getElementById("postImages");
+  const files = imageInput ? imageInput.files : [];
 
-  if (!content && !imageInput.files[0]) {
+  if (!content && !files.length) {
     showToast("请输入内容或选择图片");
     return;
   }
 
   const formData = new FormData();
   if (content) formData.append("content", content);
-  if (imageInput.files[0]) formData.append("image", imageInput.files[0]);
+  for (let i = 0; i < files.length; i++) {
+    formData.append("images", files[i]);
+  }
 
   try {
     const res = await fetch("/api/posts", {
@@ -309,7 +350,7 @@ async function submitPost() {
 
     const post = await res.json();
     document.getElementById("postContent").value = "";
-    removeImage();
+    clearImages();
 
     const feed = document.getElementById("feed");
     const card = createPostCard(post);
@@ -374,7 +415,7 @@ async function showDetail(id) {
       authorHtml = `<div class="post-author"><img src="${escapeHtml(post.author_avatar || '/default-avatar.png')}" class="author-avatar"><span>${escapeHtml(post.author_name)}</span></div>`;
     }
     let contentHtml = post.content ? `<div class="post-content" style="font-size:1.05rem;line-height:1.9">${escapeHtml(post.content)}</div>` : "";
-    let imageHtml = post.image ? `<div class="post-image"><img src="${escapeHtml(post.thumbnail || post.image)}" style="max-height:600px;object-fit:contain" onclick="window.open('${escapeHtml(post.image)}')"></div>` : "";
+    let imageHtml = buildImageGrid(post, 600);
 
     const liked = post.liked ? "liked" : "";
     const likeBtn = `<button class="btn-like ${liked}" onclick="toggleLike(${post.id}, this)"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> <span>${post.like_count || 0}</span></button>`;
@@ -401,6 +442,10 @@ async function showDetail(id) {
     let commentInputHtml = "";
     if (currentUser) {
       commentInputHtml = `
+        <div class="comment-reply-hint" id="replyHint" style="display:none">
+          <span id="replyHintText"></span>
+          <button class="comment-reply-cancel" onclick="cancelReply()">✕</button>
+        </div>
         <div class="comment-input">
           <input type="text" id="commentInput" placeholder="写评论..." maxlength="500" onkeydown="if(event.key==='Enter')submitComment(${post.id})">
           <button class="btn btn-primary btn-sm" onclick="submitComment(${post.id})">发送</button>
@@ -432,6 +477,13 @@ async function showDetail(id) {
 }
 
 function backToList() {
+  showList();
+  const feed = document.getElementById("feed");
+  if (feed && feed.children.length === 0) loadPosts();
+  history.replaceState({ list: true }, "", "/space/");
+}
+
+function showList() {
   viewMode = "list";
   const detailView = document.getElementById("detailView");
   if (detailView) detailView.style.display = "none";
@@ -442,19 +494,17 @@ function backToList() {
   if (loadMore) loadMore.style.display = "";
   const fab = document.getElementById("fab");
   if (fab) fab.style.display = "";
-  history.pushState(null, "", "/space/");
   document.title = "我的空间";
 }
 
 window.addEventListener("popstate", (e) => {
-  if (e.state && e.state.detail) {
-    showDetail(e.state.detail);
+  const pm = window.location.pathname.match(/^\/(space\/)?post\/(\d+)$/);
+  if (pm) {
+    showDetail(parseInt(pm[2]));
   } else {
+    showList();
     const feed = document.getElementById("feed");
-    feed.innerHTML = "";
-    loadPosts();
-    document.title = "我的空间";
-    viewMode = "list";
+    if (feed && feed.children.length === 0) loadPosts();
   }
 });
 
@@ -651,21 +701,40 @@ async function saveProfile() {
 }
 
 // ========== 图片预览 ==========
-function previewImage(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    document.getElementById("previewImg").src = e.target.result;
-    document.getElementById("imagePreview").style.display = "inline-block";
-  };
-  reader.readAsDataURL(file);
+function previewImages(input) {
+  const container = document.getElementById("imagesPreview");
+  const countEl = document.getElementById("imgCount");
+  container.innerHTML = "";
+  const files = input.files;
+  if (!files.length) { countEl.textContent = ""; return; }
+  countEl.textContent = "(" + files.length + "/9)";
+  Array.from(files).slice(0, 9).forEach((file, i) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const wrap = document.createElement("div");
+      wrap.className = "img-preview-item";
+      wrap.innerHTML = `<img src="${e.target.result}"><button class="remove-img" onclick="removeOneImage(${i})">✕</button>`;
+      container.appendChild(wrap);
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
-function removeImage() {
-  document.getElementById("postImage").value = "";
-  document.getElementById("imagePreview").style.display = "none";
-  document.getElementById("previewImg").src = "";
+function removeOneImage(index) {
+  const input = document.getElementById("postImages");
+  const dt = new DataTransfer();
+  Array.from(input.files).forEach((f, i) => { if (i !== index) dt.items.add(f); });
+  input.files = dt.files;
+  previewImages(input);
+}
+
+function clearImages() {
+  const input = document.getElementById("postImages");
+  if (input) input.value = "";
+  const container = document.getElementById("imagesPreview");
+  if (container) container.innerHTML = "";
+  const countEl = document.getElementById("imgCount");
+  if (countEl) countEl.textContent = "";
 }
 
 // ========== 工具函数 ==========
@@ -730,6 +799,73 @@ function closeResetModal() {
 }
 
 
+function renderReplyItem(c, postId) {
+  const canDelete = currentUser && (currentUser.id === c.user_id || currentUser.role === "superadmin" || currentUser.role === "admin");
+  const deleteBtn = canDelete ? `<button class="comment-delete" onclick="deleteComment(${c.id}, ${postId})">删除</button>` : "";
+  const replyBtn = currentUser ? `<button class="comment-reply-btn" onclick="setReply(${c.id}, '${escapeHtml(c.nickname || "匿名").replace(/'/g, "\\'")}', ${postId})">回复</button>` : "";
+  const replyTag = c.reply_to_nickname ? `<span class="comment-reply-tag">回复 @${escapeHtml(c.reply_to_nickname)}</span>` : "";
+  return `<div class="reply-item">
+    <img src="${escapeHtml(c.avatar || '/default-avatar.png')}" class="reply-avatar">
+    <div class="reply-body">
+      <div class="reply-header">
+        <span class="reply-author">${escapeHtml(c.nickname || '匿名')}</span>
+        ${replyTag}
+        <span class="reply-time">${formatTime(c.created_at)}</span>
+        ${replyBtn}
+        ${deleteBtn}
+      </div>
+      <div class="reply-text">${escapeHtml(c.content)}</div>
+    </div>
+  </div>`;
+}
+
+function renderComment(c, postId) {
+  const canDelete = currentUser && (currentUser.id === c.user_id || currentUser.role === "superadmin" || currentUser.role === "admin");
+  const deleteBtn = canDelete ? `<button class="comment-delete" onclick="deleteComment(${c.id}, ${postId})">删除</button>` : "";
+  const replyBtn = currentUser ? `<button class="comment-reply-btn" onclick="setReply(${c.id}, '${escapeHtml(c.nickname || "匿名").replace(/'/g, "\\'")}', ${postId})">回复</button>` : "";
+  const allReplies = flattenReplies(c);
+  const repliesHtml = allReplies.length ? `<div class="reply-list">${allReplies.map(r => renderReplyItem(r, postId)).join("")}</div>` : "";
+  return `<div class="comment-card">
+    <div class="comment-main">
+      <img src="${escapeHtml(c.avatar || '/default-avatar.png')}" class="comment-avatar">
+      <div class="comment-body">
+        <div class="comment-header">
+          <span class="comment-author">${escapeHtml(c.nickname || '匿名')}</span>
+          <span class="comment-time">${formatTime(c.created_at)}</span>
+          ${replyBtn}
+          ${deleteBtn}
+        </div>
+        <div class="comment-text">${escapeHtml(c.content)}</div>
+      </div>
+    </div>
+    ${repliesHtml}
+  </div>`;
+}
+
+function flattenReplies(node) {
+  const result = [];
+  if (!node.children) return result;
+  for (const child of node.children) {
+    result.push(child);
+    result.push(...flattenReplies(child));
+  }
+  return result;
+}
+
+function buildCommentTree(comments) {
+  const map = {};
+  const roots = [];
+  comments.forEach(c => { c.children = []; map[c.id] = c; });
+  comments.forEach(c => {
+    if (c.parent_id && map[c.parent_id]) {
+      map[c.parent_id].children.push(c);
+    } else {
+      roots.push(c);
+    }
+  });
+  return roots;
+}
+
 async function loadComments(postId) {
   try {
     const res = await fetch(`/api/posts/${postId}/comments`);
@@ -739,24 +875,33 @@ async function loadComments(postId) {
       list.innerHTML = '<div class="comment-empty">暂无评论，来说点什么吧 ✨</div>';
       return;
     }
-    list.innerHTML = comments.map(c => {
-      const canDelete = currentUser && (currentUser.id === c.user_id || currentUser.role === "superadmin" || currentUser.role === "admin");
-      const deleteBtn = canDelete ? `<button class="comment-delete" onclick="deleteComment(${c.id}, ${postId})">删除</button>` : "";
-      return `<div class="comment-item">
-        <img src="${escapeHtml(c.avatar || '/default-avatar.png')}" class="comment-avatar">
-        <div class="comment-body">
-          <div class="comment-header">
-            <span class="comment-author">${escapeHtml(c.nickname || '匿名')}</span>
-            <span class="comment-time">${formatTime(c.created_at)}</span>
-            ${deleteBtn}
-          </div>
-          <div class="comment-text">${escapeHtml(c.content)}</div>
-        </div>
-      </div>`;
-    }).join("");
+    const tree = buildCommentTree(comments);
+    list.innerHTML = tree.map(c => renderComment(c, postId)).join("");
   } catch (err) {
     document.getElementById("commentList").innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center">加载评论失败</div>';
   }
+}
+
+let replyToCommentId = null;
+
+function setReply(commentId, nickname, postId) {
+  replyToCommentId = commentId;
+  const hint = document.getElementById("replyHint");
+  const hintText = document.getElementById("replyHintText");
+  if (hint && hintText) {
+    hintText.textContent = "回复 " + nickname;
+    hint.style.display = "flex";
+  }
+  const input = document.getElementById("commentInput");
+  if (input) { input.placeholder = "回复 " + nickname + "..."; input.focus(); }
+}
+
+function cancelReply() {
+  replyToCommentId = null;
+  const hint = document.getElementById("replyHint");
+  if (hint) hint.style.display = "none";
+  const input = document.getElementById("commentInput");
+  if (input) input.placeholder = "写评论...";
 }
 
 async function submitComment(postId) {
@@ -764,13 +909,16 @@ async function submitComment(postId) {
   const content = input.value.trim();
   if (!content) return;
   try {
+    const body = { content };
+    if (replyToCommentId) body.parent_id = replyToCommentId;
     const res = await fetch(`/api/posts/${postId}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + currentUser.token },
-      body: JSON.stringify({ content })
+      body: JSON.stringify(body)
     });
     if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
     input.value = "";
+    cancelReply();
     loadComments(postId);
     showToast("评论成功");
   } catch (err) { showToast(err.message); }
@@ -867,4 +1015,181 @@ function confirmLogout() {
     closeProfile();
     doLogout();
   }
+}
+
+
+// ========== 公告 ==========
+function showAnnouncements() {
+  const main = document.querySelector(".main-content") || document.querySelector(".detail-wrap") || document.body;
+  // Hide feed and other content
+  const feed = document.getElementById("feed");
+  const publishArea = document.getElementById("publishArea");
+  const loadMore = document.getElementById("loadMore");
+  const emptyState = document.getElementById("emptyState");
+  const searchDrawer = document.getElementById("searchDrawer");
+  if (feed) feed.style.display = "none";
+  if (publishArea) publishArea.style.display = "none";
+  if (loadMore) loadMore.style.display = "none";
+  if (emptyState) emptyState.style.display = "none";
+  if (searchDrawer) searchDrawer.classList.remove("open");
+
+  let container = document.getElementById("announcementView");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "announcementView";
+    container.className = "announcement-view";
+    if (feed) feed.parentNode.insertBefore(container, feed);
+    else document.body.appendChild(container);
+  }
+  container.style.display = "block";
+  container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-secondary)">加载中...</div>';
+  loadAnnouncements();
+}
+
+function hideAnnouncements() {
+  const container = document.getElementById("announcementView");
+  if (container) container.style.display = "none";
+  const feed = document.getElementById("feed");
+  const publishArea = document.getElementById("publishArea");
+  const loadMore = document.getElementById("loadMore");
+  if (feed) feed.style.display = "";
+  if (publishArea && currentUser && (currentUser.role === "admin" || currentUser.role === "superadmin")) publishArea.style.display = "block";
+  if (loadMore) loadMore.style.display = "";
+}
+
+async function loadAnnouncements() {
+  const container = document.getElementById("announcementView");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/announcements");
+    const data = await res.json();
+
+    let publishBtn = "";
+    if (currentUser && currentUser.role === "superadmin") {
+      publishBtn = `<button class="btn btn-primary btn-sm" onclick="showPublishAnnouncement()" style="margin-left:auto">发布公告</button>`;
+    }
+
+    let listHtml = "";
+    if (!data.announcements.length) {
+      listHtml = '<div class="announce-empty"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:0 auto 8px;opacity:0.4"><rect width="16" height="13" x="6" y="4" rx="2"/><path d="m22 7-7.1 3.78c-.57.3-1.23.3-1.8 0L6 7"/><path d="M2 8v11a2 2 0 0 0 2 2h16"/></svg>暂无公告</div>';
+    } else {
+      listHtml = data.announcements.map(a => {
+        const pinTag = a.pinned ? '<span class="announce-pin"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg> 置顶</span>' : "";
+        const actions = currentUser && currentUser.role === "superadmin" ? `
+          <div class="announce-actions">
+            <button class="btn-text" onclick="togglePinAnnouncement(${a.id})">${a.pinned ? "取消置顶" : "置顶"}</button>
+            <button class="btn-text btn-danger" onclick="deleteAnnouncement(${a.id})">删除</button>
+          </div>` : "";
+        return `<div class="announce-card${a.pinned ? ' announce-pinned' : ''}" onclick="showAnnouncementDetail(${a.id})">
+          <div class="announce-card-header">
+            ${pinTag}
+            <h3 class="announce-title">${escapeHtml(a.title)}</h3>
+          </div>
+          <div class="announce-preview">${escapeHtml(a.content.slice(0, 100))}${a.content.length > 100 ? '...' : ''}</div>
+          <div class="announce-meta">
+            <span>${escapeHtml(a.author_name || '管理员')}</span>
+            <span>${formatTime(a.created_at)}</span>
+          </div>
+          ${actions}
+        </div>`;
+      }).join("");
+    }
+
+    container.innerHTML = `
+      <div class="announce-header">
+        <button class="back-btn" onclick="hideAnnouncements()">← 返回</button>
+        <h2><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px"><path d="m3 11 18-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg> 公告</h2>
+        ${publishBtn}
+      </div>
+      <div class="announce-list">${listHtml}</div>
+    `;
+  } catch (err) {
+    container.innerHTML = '<div style="color:#ef4444;text-align:center;padding:40px">加载公告失败</div>';
+  }
+}
+
+async function showAnnouncementDetail(id) {
+  const container = document.getElementById("announcementView");
+  if (!container) return;
+  try {
+    const res = await fetch(`/api/announcements/${id}`);
+    const a = await res.json();
+    container.innerHTML = `
+      <div class="announce-header">
+        <button class="back-btn" onclick="loadAnnouncements()">← 返回列表</button>
+      </div>
+      <div class="announce-detail-card">
+        ${a.pinned ? '<span class="announce-pin"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg> 置顶</span>' : ''}
+        <h2 class="announce-detail-title">${escapeHtml(a.title)}</h2>
+        <div class="announce-detail-meta">
+          <span>${escapeHtml(a.author_name || '管理员')}</span>
+          <span>${formatTime(a.created_at)}</span>
+        </div>
+        <div class="announce-detail-content">${escapeHtml(a.content).replace(/\n/g, '<br>')}</div>
+      </div>
+    `;
+  } catch (err) {
+    showToast("加载失败");
+  }
+}
+
+function showPublishAnnouncement() {
+  const container = document.getElementById("announcementView");
+  if (!container) return;
+  container.innerHTML = `
+    <div class="announce-header">
+      <button class="back-btn" onclick="loadAnnouncements()">← 返回列表</button>
+      <h2>发布公告</h2>
+    </div>
+    <div class="announce-form">
+      <input type="text" id="announceTitle" placeholder="公告标题" maxlength="100" class="announce-input">
+      <textarea id="announceContent" placeholder="公告内容..." maxlength="5000" rows="8" class="announce-textarea"></textarea>
+      <label class="announce-pin-label"><input type="checkbox" id="announcePinned"> 置顶</label>
+      <button class="btn btn-primary" onclick="submitAnnouncement()">发布</button>
+    </div>
+  `;
+}
+
+async function submitAnnouncement() {
+  const title = document.getElementById("announceTitle").value.trim();
+  const content = document.getElementById("announceContent").value.trim();
+  const pinned = document.getElementById("announcePinned").checked;
+  if (!title) return showToast("请输入标题");
+  if (!content) return showToast("请输入内容");
+  try {
+    const res = await fetch("/api/announcements", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + currentUser.token },
+      body: JSON.stringify({ title, content, pinned })
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    showToast("公告发布成功");
+    loadAnnouncements();
+  } catch (err) { showToast(err.message); }
+}
+
+async function deleteAnnouncement(id) {
+  event.stopPropagation();
+  if (!confirm("确定删除这条公告？")) return;
+  try {
+    const res = await fetch(`/api/announcements/${id}`, {
+      method: "DELETE",
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    showToast("公告已删除");
+    loadAnnouncements();
+  } catch (err) { showToast(err.message); }
+}
+
+async function togglePinAnnouncement(id) {
+  event.stopPropagation();
+  try {
+    const res = await fetch(`/api/announcements/${id}/pin`, {
+      method: "PATCH",
+      headers: { "Authorization": "Bearer " + currentUser.token }
+    });
+    if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
+    loadAnnouncements();
+  } catch (err) { showToast(err.message); }
 }

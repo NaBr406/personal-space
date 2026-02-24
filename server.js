@@ -35,12 +35,18 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     content TEXT,
     image TEXT,
+    images TEXT,
+    thumbnails TEXT,
     user_id INTEGER,
     views INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id)
   )
 `);
+
+// 迁移：添加 images/thumbnails 列
+try { db.exec("ALTER TABLE posts ADD COLUMN images TEXT"); } catch(e) {}
+try { db.exec("ALTER TABLE posts ADD COLUMN thumbnails TEXT"); } catch(e) {}
 
 // 点赞表
 db.exec(`
@@ -79,6 +85,16 @@ db.exec(`CREATE TABLE IF NOT EXISTS invite_codes (
 
 
 // 评论表
+db.exec(`CREATE TABLE IF NOT EXISTS announcements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  pinned INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT (datetime('now', 'localtime')),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+)`);
+
 db.exec(`CREATE TABLE IF NOT EXISTS comments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   post_id INTEGER NOT NULL,
@@ -537,18 +553,25 @@ app.post("/api/posts/:id/view", (req, res) => {
 });
 
 // 发布动态（管理员+超管）
-app.post("/api/posts", requireAdmin, upload.single("image"), async (req, res) => {
+app.post("/api/posts", requireAdmin, upload.array("images", 9), async (req, res) => {
   try {
     const content = (req.body.content || "").trim() || null;
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
-    if (!content && !image) return res.status(400).json({ error: "内容和图片至少需要一个" });
+    const files = req.files || [];
+    if (!content && !files.length) return res.status(400).json({ error: "内容和图片至少需要一个" });
 
-    let thumbnail = null;
-    if (req.file) {
-      thumbnail = await generateThumbnail(req.file.path);
+    const imageList = files.map(f => `/uploads/${f.filename}`);
+    const thumbList = [];
+    for (const f of files) {
+      const t = await generateThumbnail(f.path);
+      thumbList.push(t || `/uploads/${f.filename}`);
     }
 
-    const result = db.prepare("INSERT INTO posts (content, image, thumbnail, user_id, created_at) VALUES (?, ?, ?, ?, datetime('now', 'localtime'))").run(content, image, thumbnail, req.user.id);
+    const image = imageList[0] || null;
+    const thumbnail = thumbList[0] || null;
+    const images = imageList.length ? JSON.stringify(imageList) : null;
+    const thumbnails = thumbList.length ? JSON.stringify(thumbList) : null;
+
+    const result = db.prepare("INSERT INTO posts (content, image, thumbnail, images, thumbnails, user_id, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))").run(content, image, thumbnail, images, thumbnails, req.user.id);
     const post = db.prepare(`
       SELECT p.*, u.nickname as author_name, u.avatar as author_avatar, 0 as like_count
       FROM posts p LEFT JOIN users u ON p.user_id = u.id WHERE p.id = ?
@@ -642,8 +665,11 @@ app.post("/api/reset-password", (req, res) => {
 app.get("/api/posts/:id/comments", (req, res) => {
   const postId = parseInt(req.params.id);
   const comments = db.prepare(`
-    SELECT c.*, u.nickname, u.avatar
-    FROM comments c LEFT JOIN users u ON c.user_id = u.id
+    SELECT c.*, u.nickname, u.avatar,
+    ru.nickname as reply_to_nickname
+    FROM comments c
+    LEFT JOIN users u ON c.user_id = u.id
+    LEFT JOIN users ru ON c.reply_to_user_id = ru.id
     WHERE c.post_id = ? ORDER BY c.created_at ASC
   `).all(postId);
   res.json(comments);
@@ -659,18 +685,35 @@ app.post("/api/posts/:id/comments", requireLogin, (req, res) => {
   const post = db.prepare("SELECT id, user_id FROM posts WHERE id = ?").get(postId);
   if (!post) return res.status(404).json({ error: "动态不存在" });
 
-  const result = db.prepare("INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)").run(postId, req.user.id, content.trim());
+  const parentId = req.body.parent_id ? parseInt(req.body.parent_id) : null;
+  let replyToUserId = null;
 
-  // 通知动态作者（不通知自己）
-  if (post.user_id && post.user_id !== req.user.id) {
+  if (parentId) {
+    const parentComment = db.prepare("SELECT * FROM comments WHERE id = ? AND post_id = ?").get(parentId, postId);
+    if (!parentComment) return res.status(400).json({ error: "回复的评论不存在" });
+    replyToUserId = parentComment.user_id;
+  }
+
+  const result = db.prepare("INSERT INTO comments (post_id, user_id, content, parent_id, reply_to_user_id) VALUES (?, ?, ?, ?, ?)").run(postId, req.user.id, content.trim(), parentId, replyToUserId);
+
+  // 通知：回复评论通知被回复者，否则通知动态作者（不通知自己）
+  if (replyToUserId && replyToUserId !== req.user.id) {
+    db.prepare("INSERT INTO notifications (user_id, type, from_user_id, post_id, comment_id, content) VALUES (?, 'reply', ?, ?, ?, ?)").run(
+      replyToUserId, req.user.id, postId, result.lastInsertRowid, content.trim().slice(0, 100)
+    );
+  }
+  if (post.user_id && post.user_id !== req.user.id && post.user_id !== replyToUserId) {
     db.prepare("INSERT INTO notifications (user_id, type, from_user_id, post_id, comment_id, content) VALUES (?, 'comment', ?, ?, ?, ?)").run(
       post.user_id, req.user.id, postId, result.lastInsertRowid, content.trim().slice(0, 100)
     );
   }
 
   const comment = db.prepare(`
-    SELECT c.*, u.nickname, u.avatar
-    FROM comments c LEFT JOIN users u ON c.user_id = u.id
+    SELECT c.*, u.nickname, u.avatar,
+    ru.nickname as reply_to_nickname
+    FROM comments c
+    LEFT JOIN users u ON c.user_id = u.id
+    LEFT JOIN users ru ON c.reply_to_user_id = ru.id
     WHERE c.id = ?
   `).get(result.lastInsertRowid);
 
@@ -685,9 +728,79 @@ app.delete("/api/comments/:id", requireLogin, (req, res) => {
   if (comment.user_id !== req.user.id && req.user.role !== "superadmin" && req.user.role !== "admin") {
     return res.status(403).json({ error: "无权删除" });
   }
+  // 删除子回复的通知和子回复
+  const childIds = db.prepare("SELECT id FROM comments WHERE parent_id = ?").all(commentId).map(r => r.id);
+  for (const cid of childIds) {
+    db.prepare("DELETE FROM notifications WHERE comment_id = ?").run(cid);
+  }
+  db.prepare("DELETE FROM comments WHERE parent_id = ?").run(commentId);
   db.prepare("DELETE FROM notifications WHERE comment_id = ?").run(commentId);
   db.prepare("DELETE FROM comments WHERE id = ?").run(commentId);
   res.json({ ok: true });
+});
+
+// 公告页面路由
+app.get("/announcements", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "announcements.html"));
+});
+
+// ========== 公告 API ==========
+
+// 获取公告列表
+app.get("/api/announcements", (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 20;
+  const offset = (page - 1) * limit;
+  const total = db.prepare("SELECT COUNT(*) as c FROM announcements").get().c;
+  const list = db.prepare(`
+    SELECT a.*, u.nickname as author_name, u.avatar as author_avatar
+    FROM announcements a LEFT JOIN users u ON a.user_id = u.id
+    ORDER BY a.pinned DESC, a.created_at DESC
+    LIMIT ? OFFSET ?
+  `).all(limit, offset);
+  res.json({ announcements: list, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
+});
+
+// 获取单条公告
+app.get("/api/announcements/:id", (req, res) => {
+  const a = db.prepare(`
+    SELECT a.*, u.nickname as author_name, u.avatar as author_avatar
+    FROM announcements a LEFT JOIN users u ON a.user_id = u.id
+    WHERE a.id = ?
+  `).get(parseInt(req.params.id));
+  if (!a) return res.status(404).json({ error: "公告不存在" });
+  res.json(a);
+});
+
+// 发布公告（仅超管）
+app.post("/api/announcements", requireLogin, (req, res) => {
+  if (req.user.role !== "superadmin") return res.status(403).json({ error: "仅超管可发布公告" });
+  const { title, content, pinned } = req.body;
+  if (!title || !title.trim()) return res.status(400).json({ error: "标题不能为空" });
+  if (!content || !content.trim()) return res.status(400).json({ error: "内容不能为空" });
+  const result = db.prepare("INSERT INTO announcements (user_id, title, content, pinned) VALUES (?, ?, ?, ?)").run(
+    req.user.id, title.trim(), content.trim(), pinned ? 1 : 0
+  );
+  const a = db.prepare("SELECT * FROM announcements WHERE id = ?").get(result.lastInsertRowid);
+  res.json(a);
+});
+
+// 删除公告（仅超管）
+app.delete("/api/announcements/:id", requireLogin, (req, res) => {
+  if (req.user.role !== "superadmin") return res.status(403).json({ error: "仅超管可删除公告" });
+  const a = db.prepare("SELECT * FROM announcements WHERE id = ?").get(parseInt(req.params.id));
+  if (!a) return res.status(404).json({ error: "公告不存在" });
+  db.prepare("DELETE FROM announcements WHERE id = ?").run(a.id);
+  res.json({ ok: true });
+});
+
+// 置顶/取消置顶公告（仅超管）
+app.patch("/api/announcements/:id/pin", requireLogin, (req, res) => {
+  if (req.user.role !== "superadmin") return res.status(403).json({ error: "仅超管可操作" });
+  const a = db.prepare("SELECT * FROM announcements WHERE id = ?").get(parseInt(req.params.id));
+  if (!a) return res.status(404).json({ error: "公告不存在" });
+  db.prepare("UPDATE announcements SET pinned = ? WHERE id = ?").run(a.pinned ? 0 : 1, a.id);
+  res.json({ ok: true, pinned: !a.pinned });
 });
 
 // ========== 通知 API ==========
