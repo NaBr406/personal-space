@@ -1469,3 +1469,65 @@ body {
   font-size: 12px; cursor: pointer; display: flex;
   align-items: center; justify-content: center; line-height: 1;
 }
+
+
+/* ===== PC Drawer Detail Panel ===== */
+.drawer-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 500;
+  backdrop-filter: blur(2px);
+}
+.drawer-overlay.show { display: block; }
+
+#detailView.drawer-mode {
+  position: fixed;
+  top: 0; right: 0;
+  width: 520px;
+  max-width: 90vw;
+  height: 100vh;
+  background: var(--bg);
+  z-index: 501;
+  overflow-y: auto;
+  padding: 20px 24px;
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 30px rgba(0,0,0,0.15);
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#detailView.drawer-mode.drawer-open {
+  transform: translateX(0);
+}
+#detailView.drawer-mode .back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+#detailView.drawer-mode .card.post-card {
+  box-shadow: none;
+  border: 1px solid var(--border);
+}
+#detailView.drawer-mode .comment-section {
+  margin-top: 16px;
+}
+#detailView.drawer-mode .comment-section h4 {
+  font-size: 0.95rem;
+}
+
+/* Scrollbar styling for drawer */
+#detailView.drawer-mode::-webkit-scrollbar {
+  width: 6px;
+}
+#detailView.drawer-mode::-webkit-scrollbar-track {
+  background: transparent;
+}
+#detailView.drawer-mode::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+#detailView.drawer-mode::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}

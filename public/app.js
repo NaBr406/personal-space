@@ -1,5 +1,17 @@
 // ========== 状态管理 ==========
 let currentUser = null;
+let notifTimer = null;
+
+function startNotifPolling() {
+  loadNotifications();
+  if (notifTimer) clearInterval(notifTimer);
+  notifTimer = setInterval(loadNotifications, 30000);
+}
+function stopNotifPolling() {
+  if (notifTimer) { clearInterval(notifTimer); notifTimer = null; }
+  const badge = document.getElementById("notifBadge");
+  if (badge) { badge.textContent = ""; badge.style.display = "none"; }
+}
 let currentPage = 1;
 let totalPages = 1;
 let loading = false;
@@ -18,6 +30,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
   updateUI();
+  if (currentUser) startNotifPolling();
 
   // 路由解析：如果是 /post/:id 直接显示详情
   const pathMatch = window.location.pathname.match(/^\/(space\/)?post\/(\d+)$/);
@@ -88,6 +101,7 @@ async function doLogin() {
     document.getElementById("feed").innerHTML = "";
     loadPosts();
     showToast("欢迎回来，" + data.nickname + "");
+    startNotifPolling();
   } catch (err) { showToast(err.message); }
 }
 
@@ -124,6 +138,7 @@ async function doRegister() {
     closeAuthModal();
     updateUI();
     showToast("注册成功，欢迎 " + data.nickname + "");
+    startNotifPolling();
   } catch (err) { showToast(err.message); }
 }
 
@@ -132,6 +147,7 @@ function doLogout() {
   if (token) fetch("/api/logout", { method: "POST", headers: { "Authorization": "Bearer " + token } }).catch(() => {});
   currentUser = null;
   localStorage.removeItem("token");
+  stopNotifPolling();
   updateUI();
   currentPage = 1;
   document.getElementById("feed").innerHTML = "";
@@ -200,7 +216,7 @@ async function loadPosts() {
     if (searchStart) url += `&start=${searchStart}`;
     if (searchEnd) url += `&end=${searchEnd}`;
 
-    const res = await fetch(url);
+    const _headers = {}; if (currentUser) _headers["Authorization"] = "Bearer " + currentUser.token; const res = await fetch(url, { headers: _headers });
     const data = await res.json();
 
     if (currentPage === 1 && data.posts.length === 0) {
@@ -319,7 +335,7 @@ async function toggleLike(postId, btn) {
     if (!res.ok) throw new Error(data.error);
 
     btn.classList.toggle("liked", data.liked);
-    btn.querySelector("span").textContent = data.like_count;
+    btn.querySelector("span").textContent = data.count;
   } catch (err) { showToast(err.message); }
 }
 
@@ -381,17 +397,22 @@ async function deletePost(id) {
 }
 
 // ========== SPA 详情页 ==========
+function isDesktop() { return window.innerWidth > 768; }
+
 async function showDetail(id) {
   const feed = document.getElementById("feed");
   const loadMoreDiv = document.getElementById("loadMore");
   const pagination = document.getElementById("pagination");
+  const desktop = isDesktop();
 
-  // 隐藏列表（保留 DOM 和滚动位置）
-  feed.style.display = "none";
-  if (loadMoreDiv) loadMoreDiv.style.display = "none";
-  if (pagination) pagination.style.display = "none";
-  const fab = document.getElementById("fab");
-  if (fab) fab.style.display = "none";
+  if (!desktop) {
+    // 手机端：隐藏列表
+    feed.style.display = "none";
+    if (loadMoreDiv) loadMoreDiv.style.display = "none";
+    if (pagination) pagination.style.display = "none";
+    const fab = document.getElementById("fab");
+    if (fab) fab.style.display = "none";
+  }
 
   // 确保 detailView 容器存在
   let detailView = document.getElementById("detailView");
@@ -400,13 +421,32 @@ async function showDetail(id) {
     detailView.id = "detailView";
     feed.parentNode.insertBefore(detailView, feed.nextSibling);
   }
+
+  // PC端：抽屉模式
+  if (desktop) {
+    detailView.classList.add("drawer-mode");
+    detailView.classList.remove("drawer-open");
+    let overlay = document.getElementById("drawerOverlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "drawerOverlay";
+      overlay.className = "drawer-overlay";
+      overlay.onclick = () => backToList();
+      document.body.appendChild(overlay);
+    }
+    overlay.classList.add("show");
+    document.body.style.overflow = "hidden";
+  } else {
+    detailView.classList.remove("drawer-mode", "drawer-open");
+  }
+
   detailView.style.display = "";
   detailView.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text-secondary)">加载中...</div>';
 
   fetch(`/api/posts/${id}/view`, { method: "POST" }).catch(() => {});
 
   try {
-    const res = await fetch(`/api/posts/${id}`);
+    const _h2 = {}; if (currentUser) _h2["Authorization"] = "Bearer " + currentUser.token; const res = await fetch(`/api/posts/${id}`, { headers: _h2 });
     if (!res.ok) throw new Error("动态不存在");
     const post = await res.json();
 
@@ -460,13 +500,19 @@ async function showDetail(id) {
     detailView.appendChild(commentSection);
     loadComments(post.id);
 
-        detailView.style.opacity = "0";
-    detailView.style.transform = "translateY(8px)";
-    detailView.style.transition = "opacity 0.25s ease, transform 0.25s ease";
-    requestAnimationFrame(() => {
-      detailView.style.opacity = "1";
-      detailView.style.transform = "translateY(0)";
-    });
+    if (!desktop) {
+      detailView.style.opacity = "0";
+      detailView.style.transform = "translateY(8px)";
+      detailView.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+      requestAnimationFrame(() => {
+        detailView.style.opacity = "1";
+        detailView.style.transform = "translateY(0)";
+      });
+    } else {
+      requestAnimationFrame(() => {
+        detailView.classList.add("drawer-open");
+      });
+    }
 
     history.pushState({ detail: id }, "", "/space/post/" + id);
     document.title = (post.content ? post.content.slice(0, 30) : "图片动态") + " - 我的空间";
@@ -486,7 +532,15 @@ function backToList() {
 function showList() {
   viewMode = "list";
   const detailView = document.getElementById("detailView");
-  if (detailView) detailView.style.display = "none";
+  if (detailView) {
+    detailView.style.display = "none";
+    detailView.classList.remove("drawer-mode", "drawer-open");
+  }
+  // 关闭抽屉遮罩
+  const overlay = document.getElementById("drawerOverlay");
+  if (overlay) overlay.classList.remove("show");
+  document.body.style.overflow = "";
+
   document.getElementById("feed").style.display = "";
   const pagination = document.getElementById("pagination");
   if (pagination) pagination.style.display = "";
