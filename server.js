@@ -310,7 +310,7 @@ app.get("/api/captcha", (req, res) => {
 });
 
 // 注册
-app.post("/api/register", (req, res) => {
+app.post("/api/register", async (req, res) => {
   const regIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
   if (rateLimit("register:" + regIp, 5, 60000)) return res.status(429).json({ error: "注册请求过于频繁，请稍后再试" });
 
@@ -341,7 +341,7 @@ app.post("/api/register", (req, res) => {
   const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username);
   if (existing) return res.status(409).json({ error: "用户名已存在" });
 
-  const hash = bcrypt.hashSync(password, 10);
+  const hash = await bcrypt.hash(password, 10);
   const token = crypto.randomBytes(32).toString("hex");
   const displayName = (nickname || "").trim() || username;
 
@@ -356,14 +356,14 @@ app.post("/api/register", (req, res) => {
 });
 
 // 登录
-app.post("/api/login", (req, res) => {
+app.post("/api/login", async (req, res) => {
   const loginIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip;
   if (rateLimit("login:" + loginIp, 10, 60000)) return res.status(429).json({ error: "登录尝试过于频繁，请稍后再试" });
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "用户名和密码必填" });
 
   const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+  if (!user || !await bcrypt.compare(password, user.password_hash)) {
     return res.status(403).json({ error: "用户名或密码错误" });
   }
 
@@ -385,33 +385,41 @@ app.put("/api/me", requireLogin, upload.single("avatar"), (req, res) => {
   const avatar = req.file ? `/uploads/${req.file.filename}` : null;
 
   if (nickname) db.prepare("UPDATE users SET nickname = ? WHERE id = ?").run(nickname, req.user.id);
-  if (avatar) db.prepare("UPDATE users SET avatar = ? WHERE id = ?").run(avatar, req.user.id);
+  if (avatar) {
+    // 删除旧头像文件（保护默认头像）
+    const old = db.prepare("SELECT avatar FROM users WHERE id = ?").get(req.user.id);
+    if (old && old.avatar && old.avatar !== "/default-avatar.png" && old.avatar.startsWith("/uploads/")) {
+      const oldPath = path.join(__dirname, "public", old.avatar);
+      fs.unlink(oldPath, () => {});
+    }
+    db.prepare("UPDATE users SET avatar = ? WHERE id = ?").run(avatar, req.user.id);
+  }
 
   const updated = db.prepare("SELECT id, username, nickname, avatar, role FROM users WHERE id = ?").get(req.user.id);
   res.json(updated);
 });
 
 // 直接修改密码（已登录）
-app.post("/api/change-password-direct", requireLogin, (req, res) => {
+app.post("/api/change-password-direct", requireLogin, async (req, res) => {
   const { newPassword } = req.body;
   if (!newPassword || newPassword.length < 4) return res.status(400).json({ error: "密码至少 4 位" });
-  const hash = bcrypt.hashSync(newPassword, 10);
+  const hash = await bcrypt.hash(newPassword, 10);
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, req.user.id);
   res.json({ ok: true });
 });
 
 // 修改密码
-app.post("/api/change-password", requireLogin, (req, res) => {
+app.post("/api/change-password", requireLogin, async (req, res) => {
   const { oldPassword, newPassword } = req.body;
   if (!oldPassword || !newPassword) return res.status(400).json({ error: "请输入旧密码和新密码" });
   if (newPassword.length < 4) return res.status(400).json({ error: "新密码至少 4 位" });
 
   const user = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(req.user.id);
-  if (!bcrypt.compareSync(oldPassword, user.password_hash)) {
+  if (!await bcrypt.compare(oldPassword, user.password_hash)) {
     return res.status(403).json({ error: "旧密码错误" });
   }
 
-  const hash = bcrypt.hashSync(newPassword, 10);
+  const hash = await bcrypt.hash(newPassword, 10);
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, req.user.id);
   res.json({ ok: true });
 });
@@ -654,7 +662,7 @@ app.get("/api/users/:id/reset-code", requireSuperAdmin, (req, res) => {
 });
 
 // 用校验码重置密码（无需登录）
-app.post("/api/reset-password", (req, res) => {
+app.post("/api/reset-password", async (req, res) => {
   const { username, code, newPassword } = req.body;
   if (!username || !code || !newPassword) return res.status(400).json({ error: "请填写完整" });
   if (newPassword.length < 4) return res.status(400).json({ error: "密码至少 4 位" });
@@ -662,7 +670,7 @@ app.post("/api/reset-password", (req, res) => {
   if (!user) return res.status(404).json({ error: "用户不存在" });
   const resetCode = db.prepare("SELECT id FROM password_reset_codes WHERE user_id = ? AND code = ? AND used = 0").get(user.id, code.toUpperCase());
   if (!resetCode) return res.status(403).json({ error: "校验码无效或已使用" });
-  const hash = bcrypt.hashSync(newPassword, 10);
+  const hash = await bcrypt.hash(newPassword, 10);
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, user.id);
   db.prepare("UPDATE password_reset_codes SET used = 1 WHERE id = ?").run(resetCode.id);
   res.json({ ok: true });
