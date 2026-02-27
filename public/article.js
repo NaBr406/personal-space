@@ -1,6 +1,5 @@
-// ========== 文章页通用 JS（Vditor 版） ==========
+// ========== 文章页通用 JS（博客用 Vditor，杂谈用简洁模式） ==========
 // 页面需设置 window.ARTICLE_CATEGORY = 'blog' | 'chitchat'
-// 页面需引入 Vditor CDN
 
 let currentUser = null;
 let currentPage = 1;
@@ -9,15 +8,15 @@ let loading = false;
 let currentView = 'list';
 let vditorInstance = null;
 
+const isBlog = () => window.ARTICLE_CATEGORY === 'blog';
+
 document.addEventListener("DOMContentLoaded", async () => {
   const token = localStorage.getItem("token");
   if (token) {
     try {
       const res = await fetch("/api/me", { headers: { "Authorization": "Bearer " + token } });
-      if (res.ok) {
-        currentUser = await res.json();
-        currentUser.token = token;
-      } else { localStorage.removeItem("token"); }
+      if (res.ok) { currentUser = await res.json(); currentUser.token = token; }
+      else { localStorage.removeItem("token"); }
     } catch {}
   }
   updateUI();
@@ -46,7 +45,7 @@ function updateUI() {
   }
 }
 
-// ========== 初始化 Vditor 编辑器 ==========
+// ========== Vditor 编辑器（仅博客用） ==========
 function initVditor(elementId, initialValue) {
   if (vditorInstance) { vditorInstance.destroy(); vditorInstance = null; }
   vditorInstance = new Vditor(elementId, {
@@ -88,7 +87,7 @@ async function loadArticles() {
     const data = await res.json();
     if (currentPage === 1) container.innerHTML = "";
     if (data.articles.length === 0 && currentPage === 1) {
-      const catName = cat === 'blog' ? '博客' : '杂谈';
+      const catName = isBlog() ? '博客' : '杂谈';
       container.innerHTML = `<div class="article-empty"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> 还没有${catName}文章</div>`;
       document.getElementById("loadMoreBtn").style.display = "none";
     } else {
@@ -105,22 +104,40 @@ function createArticleCard(a) {
   const card = document.createElement("div");
   card.className = "article-card";
   card.onclick = () => showArticleDetail(a.id);
-  let coverHtml = a.cover_image ? `<img src="${escapeHtml(a.cover_image)}" class="article-card-cover" loading="lazy">` : "";
-  let summaryText = a.summary || (a.content ? a.content.replace(/[#*`>\-\[\]!()]/g, '').slice(0, 150) : "");
-  card.innerHTML = `
-    ${coverHtml}
-    <div class="article-card-title">${escapeHtml(a.title)}</div>
-    <div class="article-card-summary">${escapeHtml(summaryText)}</div>
-    <div class="article-card-meta">
-      <span>${escapeHtml(a.author_name || '管理员')}</span>
-      <span>${formatTime(a.created_at)}</span>
-      <span>👁 ${a.views || 0}</span>
-    </div>
-  `;
+
+  if (isBlog()) {
+    let coverHtml = a.cover_image ? `<img src="${escapeHtml(a.cover_image)}" class="article-card-cover" loading="lazy">` : "";
+    let summaryText = a.summary || (a.content ? a.content.replace(/[#*`>\-\[\]!()]/g, '').slice(0, 150) : "");
+    card.innerHTML = `
+      ${coverHtml}
+      <div class="article-card-title">${escapeHtml(a.title)}</div>
+      <div class="article-card-summary">${escapeHtml(summaryText)}</div>
+      <div class="article-card-meta">
+        <span>${escapeHtml(a.author_name || '管理员')}</span>
+        <span>${formatTime(a.created_at)}</span>
+        <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> ${a.views || 0}</span>
+      </div>
+    `;
+  } else {
+    // 杂谈：简洁卡片，像动态一样
+    let titleHtml = a.title ? `<div class="article-card-title" style="margin-bottom:4px">${escapeHtml(a.title)}</div>` : '';
+    let contentPreview = a.content ? a.content.slice(0, 200) : '';
+    card.innerHTML = `
+      <div class="chitchat-card-header">
+        <span class="chitchat-author">${escapeHtml(a.author_name || '管理员')}</span>
+        <span class="chitchat-time">${formatTime(a.created_at)}</span>
+      </div>
+      ${titleHtml}
+      <div class="chitchat-content">${escapeHtml(contentPreview)}${a.content && a.content.length > 200 ? '...' : ''}</div>
+      <div class="article-card-meta" style="margin-top:8px">
+        <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> ${a.views || 0}</span>
+      </div>
+    `;
+  }
   return card;
 }
 
-// ========== 文章详情（Markdown 渲染） ==========
+// ========== 文章详情 ==========
 async function showArticleDetail(id) {
   currentView = 'detail';
   if (vditorInstance) { vditorInstance.destroy(); vditorInstance = null; }
@@ -137,34 +154,53 @@ async function showArticleDetail(id) {
       deleteBtn = `<button class="btn btn-danger btn-sm" onclick="deleteArticle(${a.id})" style="margin-left:8px">删除</button>`;
       editBtn = `<button class="btn btn-secondary btn-sm" onclick="showEditForm(${a.id})" style="margin-left:8px">编辑</button>`;
     }
-    let coverHtml = a.cover_image ? `<img src="${escapeHtml(a.cover_image)}" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:20px">` : "";
-    container.innerHTML = `
-      <div class="article-detail">
-        <a href="javascript:void(0)" onclick="backToList()" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回列表</a>
-        ${coverHtml}
-        <h1 class="article-detail-title">${escapeHtml(a.title)}</h1>
-        <div class="article-detail-meta">
-          <span>${escapeHtml(a.author_name || '管理员')}</span>
-          <span>${formatTime(a.created_at)}</span>
-          <span>👁 ${a.views || 0}</span>
-          ${editBtn}${deleteBtn}
+
+    if (isBlog()) {
+      let coverHtml = a.cover_image ? `<img src="${escapeHtml(a.cover_image)}" style="width:100%;max-height:300px;object-fit:cover;border-radius:8px;margin-bottom:20px">` : "";
+      container.innerHTML = `
+        <div class="article-detail">
+          <a href="javascript:void(0)" onclick="backToList()" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回列表</a>
+          ${coverHtml}
+          <h1 class="article-detail-title">${escapeHtml(a.title)}</h1>
+          <div class="article-detail-meta">
+            <span>${escapeHtml(a.author_name || '管理员')}</span>
+            <span>${formatTime(a.created_at)}</span>
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> ${a.views || 0}</span>
+            ${editBtn}${deleteBtn}
+          </div>
+          <div class="article-detail-content" id="articlePreview"></div>
         </div>
-        <div class="article-detail-content" id="articlePreview"></div>
-      </div>
-    `;
-    // 用 Vditor 渲染 Markdown
-    const previewEl = document.getElementById("articlePreview");
-    if (typeof Vditor !== 'undefined' && Vditor.preview) {
-      Vditor.preview(previewEl, a.content, {
-        theme: { current: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' },
-        hljs: { lineNumber: true }
-      });
+      `;
+      const previewEl = document.getElementById("articlePreview");
+      if (typeof Vditor !== 'undefined' && Vditor.preview) {
+        Vditor.preview(previewEl, a.content, {
+          theme: { current: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' },
+          hljs: { lineNumber: true }
+        });
+      } else {
+        previewEl.innerHTML = escapeHtml(a.content).replace(/\n/g, '<br>');
+      }
     } else {
-      previewEl.innerHTML = escapeHtml(a.content).replace(/\n/g, '<br>');
+      // 杂谈详情：简洁
+      let titleHtml = a.title ? `<h1 class="article-detail-title">${escapeHtml(a.title)}</h1>` : '';
+      container.innerHTML = `
+        <div class="article-detail">
+          <a href="javascript:void(0)" onclick="backToList()" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回列表</a>
+          ${titleHtml}
+          <div class="article-detail-meta">
+            <span>${escapeHtml(a.author_name || '管理员')}</span>
+            <span>${formatTime(a.created_at)}</span>
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg> ${a.views || 0}</span>
+            ${editBtn}${deleteBtn}
+          </div>
+          <div class="article-detail-content">${escapeHtml(a.content).replace(/\n/g, '<br>')}</div>
+        </div>
+      `;
     }
+
     const cat = window.ARTICLE_CATEGORY;
     history.pushState({ detail: id }, "", `/${cat}/${id}`);
-    document.title = a.title + (cat === 'blog' ? ' - 博客' : ' - 杂谈');
+    document.title = (a.title || '杂谈') + (isBlog() ? ' - 博客' : ' - 杂谈');
   } catch (err) {
     container.innerHTML = `<div style="text-align:center;padding:60px;color:#ef4444">${err.message}</div>`;
   }
@@ -177,7 +213,7 @@ function backToList() {
   loadArticles();
   const cat = window.ARTICLE_CATEGORY;
   history.replaceState(null, "", `/${cat}`);
-  document.title = cat === 'blog' ? '博客' : '杂谈';
+  document.title = isBlog() ? '博客' : '杂谈';
 }
 
 window.addEventListener("popstate", () => {
@@ -186,34 +222,50 @@ window.addEventListener("popstate", () => {
   if (m) { showArticleDetail(parseInt(m[2])); } else { backToList(); }
 });
 
-// ========== 发布文章（Vditor） ==========
+// ========== 发布 ==========
 function showPublishForm() {
   currentView = 'publish';
   const container = document.getElementById("articleContainer");
   document.getElementById("loadMoreBtn").style.display = "none";
   const cat = window.ARTICLE_CATEGORY;
-  const catName = cat === 'blog' ? '博客' : '杂谈';
-  container.innerHTML = `
-    <div class="article-form">
-      <a href="javascript:void(0)" onclick="backToList()" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回列表</a>
-      <h2 style="margin-bottom:16px">发布${catName}</h2>
-      <input type="text" id="articleTitle" placeholder="标题" maxlength="200">
-      <input type="text" id="articleSummary" placeholder="摘要（选填，不填自动截取）" maxlength="300">
-      <div style="margin-bottom:12px">
-        <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--primary);font-size:0.9rem">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> 封面图（选填）
-          <input type="file" id="articleCover" accept="image/*" hidden onchange="previewCover(this)">
-        </label>
-        <div id="coverPreview"></div>
+  const catName = isBlog() ? '博客' : '杂谈';
+
+  if (isBlog()) {
+    container.innerHTML = `
+      <div class="article-form">
+        <a href="javascript:void(0)" onclick="backToList()" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回列表</a>
+        <h2 style="margin-bottom:16px">发布${catName}</h2>
+        <input type="text" id="articleTitle" placeholder="标题" maxlength="200">
+        <input type="text" id="articleSummary" placeholder="摘要（选填，不填自动截取）" maxlength="300">
+        <div style="margin-bottom:12px">
+          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--primary);font-size:0.9rem">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> 封面图（选填）
+            <input type="file" id="articleCover" accept="image/*" hidden onchange="previewCover(this)">
+          </label>
+          <div id="coverPreview"></div>
+        </div>
+        <div id="vditorEditor"></div>
+        <div class="article-form-actions" style="margin-top:12px">
+          <button class="btn btn-secondary" onclick="backToList()">取消</button>
+          <button class="btn btn-primary" onclick="submitArticle()">发布</button>
+        </div>
       </div>
-      <div id="vditorEditor"></div>
-      <div class="article-form-actions" style="margin-top:12px">
-        <button class="btn btn-secondary" onclick="backToList()">取消</button>
-        <button class="btn btn-primary" onclick="submitArticle()">发布</button>
+    `;
+    initVditor('vditorEditor', '');
+  } else {
+    // 杂谈：简洁发布
+    container.innerHTML = `
+      <div class="article-form chitchat-form">
+        <a href="javascript:void(0)" onclick="backToList()" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回</a>
+        <input type="text" id="articleTitle" placeholder="标题（选填）" maxlength="200">
+        <textarea id="articleContent" placeholder="说点什么..." rows="6" style="resize:vertical"></textarea>
+        <div class="article-form-actions" style="margin-top:8px">
+          <button class="btn btn-secondary" onclick="backToList()">取消</button>
+          <button class="btn btn-primary" onclick="submitArticle()">发布</button>
+        </div>
       </div>
-    </div>
-  `;
-  initVditor('vditorEditor', '');
+    `;
+  }
 }
 
 function previewCover(input) {
@@ -232,18 +284,33 @@ function clearCover() {
 }
 
 async function submitArticle() {
-  const title = document.getElementById("articleTitle").value.trim();
-  const content = vditorInstance ? vditorInstance.getValue().trim() : '';
-  const summary = document.getElementById("articleSummary").value.trim();
-  const coverInput = document.getElementById("articleCover");
-  if (!title) return showToast("请输入标题");
+  const titleEl = document.getElementById("articleTitle");
+  const title = titleEl ? titleEl.value.trim() : '';
+  let content = '';
+  if (isBlog()) {
+    content = vditorInstance ? vditorInstance.getValue().trim() : '';
+  } else {
+    content = document.getElementById("articleContent").value.trim();
+  }
+
+  if (isBlog() && !title) return showToast("请输入标题");
   if (!content) return showToast("请输入内容");
+
+  // 杂谈没标题时用内容前30字当标题
+  const finalTitle = title || content.slice(0, 30);
+
   const formData = new FormData();
-  formData.append("title", title);
+  formData.append("title", finalTitle);
   formData.append("content", content);
   formData.append("category", window.ARTICLE_CATEGORY);
-  if (summary) formData.append("summary", summary);
-  if (coverInput.files && coverInput.files[0]) formData.append("cover", coverInput.files[0]);
+
+  if (isBlog()) {
+    const summary = document.getElementById("articleSummary");
+    if (summary && summary.value.trim()) formData.append("summary", summary.value.trim());
+    const coverInput = document.getElementById("articleCover");
+    if (coverInput && coverInput.files && coverInput.files[0]) formData.append("cover", coverInput.files[0]);
+  }
+
   try {
     const res = await fetch("/api/articles", {
       method: "POST",
@@ -256,7 +323,7 @@ async function submitArticle() {
   } catch (err) { showToast(err.message); }
 }
 
-// ========== 编辑文章（Vditor） ==========
+// ========== 编辑 ==========
 async function showEditForm(id) {
   currentView = 'edit';
   const container = document.getElementById("articleContainer");
@@ -264,27 +331,43 @@ async function showEditForm(id) {
   try {
     const res = await fetch(`/api/articles/${id}`);
     const a = await res.json();
-    container.innerHTML = `
-      <div class="article-form">
-        <a href="javascript:void(0)" onclick="showArticleDetail(${id})" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回文章</a>
-        <h2 style="margin-bottom:16px">编辑文章</h2>
-        <input type="text" id="editTitle" placeholder="标题" maxlength="200" value="${escapeAttr(a.title)}">
-        <input type="text" id="editSummary" placeholder="摘要（选填）" maxlength="300" value="${escapeAttr(a.summary || '')}">
-        <div style="margin-bottom:12px">
-          <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--primary);font-size:0.9rem">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> 更换封面图
-            <input type="file" id="editCover" accept="image/*" hidden onchange="previewEditCover(this)">
-          </label>
-          <div id="editCoverPreview">${a.cover_image ? `<img src="${escapeHtml(a.cover_image)}" style="max-width:100%;max-height:150px;border-radius:8px;margin-top:8px">` : ''}</div>
+
+    if (isBlog()) {
+      container.innerHTML = `
+        <div class="article-form">
+          <a href="javascript:void(0)" onclick="showArticleDetail(${id})" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回文章</a>
+          <h2 style="margin-bottom:16px">编辑文章</h2>
+          <input type="text" id="editTitle" placeholder="标题" maxlength="200" value="${escapeAttr(a.title)}">
+          <input type="text" id="editSummary" placeholder="摘要（选填）" maxlength="300" value="${escapeAttr(a.summary || '')}">
+          <div style="margin-bottom:12px">
+            <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:var(--primary);font-size:0.9rem">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> 更换封面图
+              <input type="file" id="editCover" accept="image/*" hidden onchange="previewEditCover(this)">
+            </label>
+            <div id="editCoverPreview">${a.cover_image ? `<img src="${escapeHtml(a.cover_image)}" style="max-width:100%;max-height:150px;border-radius:8px;margin-top:8px">` : ''}</div>
+          </div>
+          <div id="vditorEditor"></div>
+          <div class="article-form-actions" style="margin-top:12px">
+            <button class="btn btn-secondary" onclick="showArticleDetail(${id})">取消</button>
+            <button class="btn btn-primary" onclick="updateArticle(${id})">保存</button>
+          </div>
         </div>
-        <div id="vditorEditor"></div>
-        <div class="article-form-actions" style="margin-top:12px">
-          <button class="btn btn-secondary" onclick="showArticleDetail(${id})">取消</button>
-          <button class="btn btn-primary" onclick="updateArticle(${id})">保存</button>
+      `;
+      initVditor('vditorEditor', a.content || '');
+    } else {
+      // 杂谈编辑：简洁
+      container.innerHTML = `
+        <div class="article-form chitchat-form">
+          <a href="javascript:void(0)" onclick="showArticleDetail(${id})" class="back-link" style="display:inline-block;margin-bottom:16px;color:var(--primary);text-decoration:none">← 返回</a>
+          <input type="text" id="editTitle" placeholder="标题（选填）" maxlength="200" value="${escapeAttr(a.title)}">
+          <textarea id="editContent" placeholder="说点什么..." rows="6" style="resize:vertical">${escapeHtml(a.content)}</textarea>
+          <div class="article-form-actions" style="margin-top:8px">
+            <button class="btn btn-secondary" onclick="showArticleDetail(${id})">取消</button>
+            <button class="btn btn-primary" onclick="updateArticle(${id})">保存</button>
+          </div>
         </div>
-      </div>
-    `;
-    initVditor('vditorEditor', a.content || '');
+      `;
+    }
   } catch (err) { showToast("加载失败"); }
 }
 
@@ -301,16 +384,27 @@ function previewEditCover(input) {
 
 async function updateArticle(id) {
   const title = document.getElementById("editTitle").value.trim();
-  const content = vditorInstance ? vditorInstance.getValue().trim() : '';
-  const summary = document.getElementById("editSummary").value.trim();
-  const coverInput = document.getElementById("editCover");
-  if (!title) return showToast("请输入标题");
+  let content = '';
+  if (isBlog()) {
+    content = vditorInstance ? vditorInstance.getValue().trim() : '';
+  } else {
+    content = document.getElementById("editContent").value.trim();
+  }
+  if (isBlog() && !title) return showToast("请输入标题");
   if (!content) return showToast("请输入内容");
+
+  const finalTitle = title || content.slice(0, 30);
   const formData = new FormData();
-  formData.append("title", title);
+  formData.append("title", finalTitle);
   formData.append("content", content);
-  if (summary) formData.append("summary", summary);
-  if (coverInput.files && coverInput.files[0]) formData.append("cover", coverInput.files[0]);
+
+  if (isBlog()) {
+    const summary = document.getElementById("editSummary");
+    if (summary && summary.value.trim()) formData.append("summary", summary.value.trim());
+    const coverInput = document.getElementById("editCover");
+    if (coverInput && coverInput.files && coverInput.files[0]) formData.append("cover", coverInput.files[0]);
+  }
+
   try {
     const res = await fetch(`/api/articles/${id}`, {
       method: "PUT",
@@ -323,9 +417,9 @@ async function updateArticle(id) {
   } catch (err) { showToast(err.message); }
 }
 
-// ========== 删除文章 ==========
+// ========== 删除 ==========
 async function deleteArticle(id) {
-  if (!confirm("确定要删除这篇文章吗？")) return;
+  if (!confirm("确定要删除吗？")) return;
   try {
     const res = await fetch(`/api/articles/${id}`, {
       method: "DELETE",

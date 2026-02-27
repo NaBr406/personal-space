@@ -1785,3 +1785,45 @@ body {
   font-weight: 600;
   margin: 0;
 }
+
+
+/* ========== 杂谈专属样式 ========== */
+.chitchat-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+.chitchat-author { color: var(--text-primary); font-weight: 500; }
+.chitchat-time { color: var(--muted); }
+.chitchat-content {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  word-break: break-word;
+}
+.chitchat-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-family: inherit;
+  line-height: 1.7;
+}
+.chitchat-form input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+  font-family: inherit;
+}
