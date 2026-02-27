@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>博客</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/vditor/dist/index.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" title="返回主站" style="color:var(--text-secondary);margin-right:8px;display:inline-flex;align-items:center;text-decoration:none;transition:color 0.2s"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></a>
+      <h1 class="logo"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg> 博客</h1>
+      <div class="header-actions">
+        <div id="loginArea" style="display:flex;gap:6px;">
+          <button class="btn btn-primary btn-sm" onclick="goLogin()">登录</button>
+        </div>
+        <div id="userArea" style="display:none;align-items:center;gap:8px;">
+          <img id="userAvatar" src="/default-avatar.png" class="header-avatar">
+          <span id="userNickname" class="header-nickname"></span>
+          <button class="btn btn-secondary btn-sm" onclick="doLogout()">退出</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="article-header">
+    <h2><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-3px"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg> 博客</h2>
+    <button class="btn btn-primary btn-sm" id="publishArticleBtn" style="display:none" onclick="showPublishForm()">写博客</button>
+  </div>
+
+  <div class="article-list" id="articleContainer"></div>
+  <div class="load-more" id="loadMoreBtn" style="display:none;">
+    <button class="btn btn-secondary" onclick="loadArticles()">加载更多</button>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script src="https://unpkg.com/vditor/dist/index.min.js"></script>
+  <script>window.ARTICLE_CATEGORY = 'blog';</script>
+  <script src="/article.js?v=20260228"></script>
+</body>
+</html>
