@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>公告 - NaBr406</title>
+  <script>(function(){try{var t=localStorage.getItem('site-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();</script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
@@ -14,9 +15,22 @@
       --text2: #6e6e73;
       --accent: #3b82f6;
       --accent-glow: rgba(59,130,246,0.1);
+      --nav-bg: rgba(245,245,247,0.72);
+      --nav-border: rgba(0,0,0,0.06);
+    }
+    :root[data-theme="dark"] {
+      --bg: #050505;
+      --card: rgba(255,255,255,0.04);
+      --card-border: rgba(255,255,255,0.08);
+      --text: #f5f5f7;
+      --text2: #86868b;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59,130,246,0.15);
+      --nav-bg: rgba(5,5,5,0.72);
+      --nav-border: rgba(255,255,255,0.06);
     }
     @media (prefers-color-scheme: dark) {
-      :root {
+      :root:not([data-theme]) {
         --bg: #050505;
         --card: rgba(255,255,255,0.04);
         --card-border: rgba(255,255,255,0.08);
@@ -24,6 +38,8 @@
         --text2: #86868b;
         --accent: #3b82f6;
         --accent-glow: rgba(59,130,246,0.15);
+        --nav-bg: rgba(5,5,5,0.72);
+        --nav-border: rgba(255,255,255,0.06);
       }
     }
     html { scroll-behavior: smooth; }
@@ -36,19 +52,33 @@
     /* 背景光晕 */
     .bg-glow { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
     .glow-orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.15; animation: float 20s ease-in-out infinite; }
-    @media (prefers-color-scheme: dark) { .glow-orb { opacity: 0.3; } }
+    :root[data-theme="dark"] .glow-orb { opacity: 0.3; }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .glow-orb { opacity: 0.3; } }
     .glow-1 { width: 500px; height: 500px; background: radial-gradient(circle, rgba(59,130,246,0.25), transparent 70%); top: -10%; left: -10%; }
     .glow-2 { width: 400px; height: 400px; background: radial-gradient(circle, rgba(99,102,241,0.2), transparent 70%); bottom: 10%; right: -10%; animation-delay: -10s; }
     @keyframes float { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(30px,-30px) scale(1.05)} 66%{transform:translate(-20px,20px) scale(0.95)} }
 
     /* 导航栏 */
-    nav { position: fixed; top: 0; width: 100%; background: rgba(245,245,247,0.72); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid rgba(0,0,0,0.06); z-index: 100; }
-    @media (prefers-color-scheme: dark) { nav { background: rgba(5,5,5,0.72); border-bottom-color: rgba(255,255,255,0.06); } }
+    nav { position: fixed; top: 0; width: 100%; background: var(--nav-bg); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--nav-border); z-index: 100; }
     .nav-inner { max-width: 980px; margin: 0 auto; padding: 0 22px; display: flex; align-items: center; justify-content: space-between; height: 48px; }
     .nav-logo { font-size: 17px; font-weight: 600; color: var(--text); text-decoration: none; letter-spacing: -0.3px; }
     .nav-links { display: flex; gap: 28px; align-items: center; }
     .nav-links a { color: var(--text2); text-decoration: none; font-size: 13px; transition: color 0.3s; }
     .nav-links a:hover, .nav-links a.active { color: var(--text); }
+    .theme-toggle-btn {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid var(--card-border);
+      background: transparent;
+      color: var(--text2);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .theme-toggle-btn:hover { color: var(--text); border-color: var(--accent); background: var(--card); }
 
     /* 主内容 */
     .main-wrap { position: relative; z-index: 1; max-width: 680px; margin: 0 auto; padding: 72px 20px 40px; }
@@ -143,6 +173,7 @@
         <a href="/">首页</a>
         <a href="/space/">空间</a>
         <a href="/space/announcements" class="active">公告</a>
+        <button class="theme-toggle-btn" data-theme-toggle type="button" title="切换主题"></button>
       </div>
     </div>
   </nav>
@@ -163,6 +194,7 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="/theme.js?v=2026030503"></script>
   <script>
     let currentUser = null;
 
