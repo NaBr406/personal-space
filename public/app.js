@@ -1,3 +1,16 @@
+(function syncMainSiteToken() {
+  try {
+    const currentToken = localStorage.getItem("token");
+    if (currentToken && !currentToken.startsWith("eyJ")) {
+      localStorage.setItem("ps_main_token", currentToken);
+    }
+    const psMainToken = localStorage.getItem("ps_main_token");
+    if (psMainToken && currentToken && currentToken.startsWith("eyJ")) {
+      localStorage.setItem("token", psMainToken);
+    }
+  } catch (e) {}
+})();
+
 // ========== 状态管理 ==========
 let currentUser = null;
 let notifTimer = null;
@@ -97,6 +110,7 @@ async function doLogin() {
 
     currentUser = data;
     localStorage.setItem("token", data.token);
+    localStorage.setItem("ps_main_token", data.token);
     closeAuthModal();
     updateUI();
     currentPage = 1;
@@ -137,6 +151,7 @@ async function doRegister() {
 
     currentUser = data;
     localStorage.setItem("token", data.token);
+    localStorage.setItem("ps_main_token", data.token);
     closeAuthModal();
     updateUI();
     showToast("注册成功，欢迎 " + data.nickname + "");
@@ -149,6 +164,7 @@ function doLogout() {
   if (token) fetch("/api/logout", { method: "POST", headers: { "Authorization": "Bearer " + token } }).catch(() => {});
   currentUser = null;
   localStorage.removeItem("token");
+  localStorage.removeItem("ps_main_token");
   stopNotifPolling();
   updateUI();
   currentPage = 1;

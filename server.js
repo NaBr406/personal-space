@@ -239,7 +239,12 @@ function getUser(req) {
 
 function requireLogin(req, res, next) {
   const user = getUser(req);
-  if (!user) return res.status(401).json({ error: "请先登录" });
+  if (!user) {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    return res.status(401).json({ error: "请先登录" });
+  }
   req.user = user;
   next();
 }
@@ -392,6 +397,9 @@ app.post("/api/login", async (req, res) => {
 
 // 获取当前用户信息
 app.get("/api/me", requireLogin, (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
   res.json(req.user);
 });
 
