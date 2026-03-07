@@ -211,8 +211,21 @@
       document.querySelectorAll('.fade-in:not(.visible)').forEach(el => observer.observe(el));
     }
 
+    (function syncMainSiteToken() {
+      try {
+        const currentToken = localStorage.getItem("token");
+        const psMainToken = localStorage.getItem("ps_main_token");
+        if (currentToken && !currentToken.startsWith("eyJ")) {
+          localStorage.setItem("ps_main_token", currentToken);
+        }
+        if (psMainToken && (!currentToken || currentToken.startsWith("eyJ"))) {
+          localStorage.setItem("token", psMainToken);
+        }
+      } catch (e) {}
+    })();
+
     async function checkLogin() {
-      const token = localStorage.getItem("token");
+      const token = localStorage.getItem("ps_main_token") || localStorage.getItem("token");
       if (!token) return;
       try {
         const res = await fetch("/api/me", { headers: { "Authorization": "Bearer " + token } });
@@ -220,6 +233,9 @@
           currentUser = await res.json();
           currentUser.token = token;
           if (currentUser.role === "superadmin") document.getElementById("btnPublish").style.display = "";
+        } else {
+          localStorage.removeItem("token");
+          localStorage.removeItem("ps_main_token");
         }
       } catch {}
     }

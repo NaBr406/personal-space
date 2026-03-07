@@ -13,13 +13,26 @@ let editorShortcutHandler = null;
 const EDITOR_DRAFT_PREFIX = 'article_draft_v2';
 const isBlog = () => window.ARTICLE_CATEGORY === 'blog';
 
+(function syncMainSiteToken() {
+  try {
+    const currentToken = localStorage.getItem("token");
+    const psMainToken = localStorage.getItem("ps_main_token");
+    if (currentToken && !currentToken.startsWith("eyJ")) {
+      localStorage.setItem("ps_main_token", currentToken);
+    }
+    if (psMainToken && (!currentToken || currentToken.startsWith("eyJ"))) {
+      localStorage.setItem("token", psMainToken);
+    }
+  } catch (e) {}
+})();
+
 document.addEventListener("DOMContentLoaded", async () => {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("ps_main_token") || localStorage.getItem("token");
   if (token) {
     try {
       const res = await fetch("/api/me", { headers: { "Authorization": "Bearer " + token } });
       if (res.ok) { currentUser = await res.json(); currentUser.token = token; }
-      else { localStorage.removeItem("token"); }
+      else { localStorage.removeItem("token"); localStorage.removeItem("ps_main_token"); }
     } catch {}
   }
   updateUI();
@@ -1032,10 +1045,11 @@ function showToast(msg) {
 }
 function goLogin() { window.location.href = "/space/#login"; }
 function doLogout() {
-  const token = localStorage.getItem("token");
+  const token = localStorage.getItem("ps_main_token") || localStorage.getItem("token");
   if (token) fetch("/api/logout", { method: "POST", headers: { "Authorization": "Bearer " + token } }).catch(() => {});
   currentUser = null;
   localStorage.removeItem("token");
+  localStorage.removeItem("ps_main_token");
   updateUI();
   showToast("已退出");
 }
