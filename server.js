@@ -7,11 +7,12 @@ const Database = require("better-sqlite3");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 
+const config = require("./config");
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = config.port;
 
 // ========== 数据库初始化 ==========
-const db = new Database(path.join(__dirname, "data.db"));
+const db = new Database(config.dbPath);
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
@@ -187,10 +188,10 @@ if (!superAdmin) {
 // ========== 中间件 ==========
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(config.publicDir));
 
 // ========== 图片上传 ==========
-const uploadDir = path.join(__dirname, "public/uploads");
+const uploadDir = config.uploadDir;
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
   filename: (req, file, cb) => {
@@ -413,7 +414,7 @@ app.put("/api/me", requireLogin, upload.single("avatar"), (req, res) => {
     // 删除旧头像文件（保护默认头像）
     const old = db.prepare("SELECT avatar FROM users WHERE id = ?").get(req.user.id);
     if (old && old.avatar && old.avatar !== "/default-avatar.png" && old.avatar.startsWith("/uploads/")) {
-      const oldPath = path.join(__dirname, "public", old.avatar);
+      const oldPath = path.join(config.publicDir, old.avatar);
       fs.unlink(oldPath, () => {});
     }
     db.prepare("UPDATE users SET avatar = ? WHERE id = ?").run(avatar, req.user.id);
@@ -517,8 +518,8 @@ app.delete("/api/users/:id", requireSuperAdmin, (req, res) => {
   deleteUserTx();
   // 清理图片文件（事务外，不影响数据一致性）
   for (const post of posts) {
-    if (post.image) fs.unlink(path.join(__dirname, "public", post.image), () => {});
-    if (post.thumbnail) fs.unlink(path.join(__dirname, "public", post.thumbnail), () => {});
+    if (post.image) fs.unlink(path.join(config.publicDir, post.image), () => {});
+    if (post.thumbnail) fs.unlink(path.join(config.publicDir, post.thumbnail), () => {});
   }
 
   res.json({ message: "用户已删除" });
@@ -633,10 +634,10 @@ app.delete("/api/posts/:id", requireAdmin, (req, res) => {
   if (!post) return res.status(404).json({ error: "动态不存在" });
 
   if (post.image) {
-    fs.unlink(path.join(__dirname, "public", post.image), () => {});
+    fs.unlink(path.join(config.publicDir, post.image), () => {});
   }
   if (post.thumbnail) {
-    fs.unlink(path.join(__dirname, "public", post.thumbnail), () => {});
+    fs.unlink(path.join(config.publicDir, post.thumbnail), () => {});
   }
 
   db.prepare("DELETE FROM likes WHERE post_id = ?").run(id);
@@ -783,7 +784,7 @@ app.delete("/api/comments/:id", requireLogin, (req, res) => {
 
 // 公告页面路由
 app.get("/announcements", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "announcements.html"));
+  res.sendFile(path.join(config.publicDir, "announcements.html"));
 });
 
 // ========== 公告 API ==========
@@ -926,7 +927,7 @@ app.get("/api/visitors", requireSuperAdmin, (req, res) => {
 
 // ========== 页面路由 ==========
 app.get("/post/:id", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+  res.sendFile(path.join(config.publicDir, "index.html"));
 });
 
 
@@ -1043,7 +1044,7 @@ app.delete("/api/articles/:id", requireSuperAdmin, (req, res) => {
   const a = db.prepare("SELECT * FROM articles WHERE id = ?").get(id);
   if (!a) return res.status(404).json({ error: "文章不存在" });
   if (a.cover_image) {
-    const coverPath = require("path").join(__dirname, "public", a.cover_image);
+    const coverPath = path.join(config.publicDir, a.cover_image);
     require("fs").unlink(coverPath, () => {});
   }
   db.prepare("DELETE FROM articles WHERE id = ?").run(id);
@@ -1052,23 +1053,23 @@ app.delete("/api/articles/:id", requireSuperAdmin, (req, res) => {
 
 // 博客页面路由
 app.get("/blog", (req, res) => {
-  res.sendFile(require("path").join(__dirname, "public", "blog.html"));
+  res.sendFile(path.join(config.publicDir, "blog.html"));
 });
 app.get("/blog/:id", (req, res) => {
-  res.sendFile(require("path").join(__dirname, "public", "blog.html"));
+  res.sendFile(path.join(config.publicDir, "blog.html"));
 });
 
 // 杂谈页面路由
 app.get("/chitchat", (req, res) => {
-  res.sendFile(require("path").join(__dirname, "public", "chitchat.html"));
+  res.sendFile(path.join(config.publicDir, "chitchat.html"));
 });
 app.get("/chitchat/:id", (req, res) => {
-  res.sendFile(require("path").join(__dirname, "public", "chitchat.html"));
+  res.sendFile(path.join(config.publicDir, "chitchat.html"));
 });
 
 // ========== SPA fallback ==========
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(config.publicDir, 'index.html'));
 });
 
 // ========== 错误处理 ==========
@@ -1079,5 +1080,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 个人空间已启动: http://localhost:${PORT}`);
+  console.log(`🚀 个人空间已启动 [${config.envName}]: http://localhost:${PORT}`);
 });
