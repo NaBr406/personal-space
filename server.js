@@ -1,7 +1,5 @@
 const express = require("express");
 const path = require("path");
-const multer = require("multer");
-const sharp = require("sharp");
 const fs = require("fs");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
@@ -20,44 +18,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(config.publicDir));
 
 // ========== 图片上传 ==========
-const uploadDir = config.uploadDir;
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, Date.now() + "-" + Math.random().toString(36).slice(2, 8) + ext);
-  }
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 100 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif|webp/;
-    if (allowed.test(path.extname(file.originalname).toLowerCase()) && allowed.test(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error("只支持 jpg/png/gif/webp 格式"));
-    }
-  }
-});
-
-// ========== 缩略图生成 ==========
-async function generateThumbnail(filePath) {
-  try {
-    const dir = path.dirname(filePath);
-    const ext = path.extname(filePath);
-    const base = path.basename(filePath, ext);
-    const thumbPath = path.join(dir, "thumb_" + base + ".webp");
-    await sharp(filePath)
-      .resize(800, null, { withoutEnlargement: true })
-      .webp({ quality: 80 })
-      .toFile(thumbPath);
-    return "/uploads/thumb_" + base + ".webp";
-  } catch (e) {
-    console.error("缩略图生成失败:", e.message);
-    return null;
-  }
-}
+const { createUploadService } = require("./services/uploads");
+const { upload, generateThumbnail } = createUploadService(config);
 
 // ========== Token 认证中间件 ==========
 const { createAuthMiddleware } = require("./middleware/auth");
