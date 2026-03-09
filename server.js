@@ -167,84 +167,19 @@ registerUserRoutes({
   crypto,
 });
 
-// ========== 评论 API ==========
-
-// 获取动态的评论
-app.get("/api/posts/:id/comments", (req, res) => {
-  const postId = parseInt(req.params.id);
-  const comments = db.prepare(`
-    SELECT c.*, u.nickname, u.avatar,
-    ru.nickname as reply_to_nickname
-    FROM comments c
-    LEFT JOIN users u ON c.user_id = u.id
-    LEFT JOIN users ru ON c.reply_to_user_id = ru.id
-    WHERE c.post_id = ? ORDER BY c.created_at ASC
-  `).all(postId);
-  res.json(comments);
-});
-
-// 发表评论
-app.post("/api/posts/:id/comments", requireLogin, (req, res) => {
-  const postId = parseInt(req.params.id);
-  const { content } = req.body;
-  if (!content || !content.trim()) return res.status(400).json({ error: "评论内容不能为空" });
-  if (content.length > 500) return res.status(400).json({ error: "评论不能超过 500 字" });
-
-  const post = db.prepare("SELECT id, user_id FROM posts WHERE id = ?").get(postId);
-  if (!post) return res.status(404).json({ error: "动态不存在" });
-
-  const parentId = req.body.parent_id ? parseInt(req.body.parent_id) : null;
-  let replyToUserId = null;
-
-  if (parentId) {
-    const parentComment = db.prepare("SELECT * FROM comments WHERE id = ? AND post_id = ?").get(parentId, postId);
-    if (!parentComment) return res.status(400).json({ error: "回复的评论不存在" });
-    replyToUserId = parentComment.user_id;
-  }
-
-  const result = db.prepare("INSERT INTO comments (post_id, user_id, content, parent_id, reply_to_user_id) VALUES (?, ?, ?, ?, ?)").run(postId, req.user.id, content.trim(), parentId, replyToUserId);
-
-  // 通知：回复评论通知被回复者，否则通知动态作者（不通知自己）
-  if (replyToUserId && replyToUserId !== req.user.id) {
-    db.prepare("INSERT INTO notifications (user_id, type, from_user_id, post_id, comment_id, content) VALUES (?, 'reply', ?, ?, ?, ?)").run(
-      replyToUserId, req.user.id, postId, result.lastInsertRowid, content.trim().slice(0, 100)
-    );
-  }
-  if (post.user_id && post.user_id !== req.user.id && post.user_id !== replyToUserId) {
-    db.prepare("INSERT INTO notifications (user_id, type, from_user_id, post_id, comment_id, content) VALUES (?, 'comment', ?, ?, ?, ?)").run(
-      post.user_id, req.user.id, postId, result.lastInsertRowid, content.trim().slice(0, 100)
-    );
-  }
-
-  const comment = db.prepare(`
-    SELECT c.*, u.nickname, u.avatar,
-    ru.nickname as reply_to_nickname
-    FROM comments c
-    LEFT JOIN users u ON c.user_id = u.id
-    LEFT JOIN users ru ON c.reply_to_user_id = ru.id
-    WHERE c.id = ?
-  `).get(result.lastInsertRowid);
-
-  res.json(comment);
-});
-
-// 删除评论（作者或超管）
-app.delete("/api/comments/:id", requireLogin, (req, res) => {
-  const commentId = parseInt(req.params.id);
-  const comment = db.prepare("SELECT * FROM comments WHERE id = ?").get(commentId);
-  if (!comment) return res.status(404).json({ error: "评论不存在" });
-  if (comment.user_id !== req.user.id && req.user.role !== "superadmin" && req.user.role !== "admin") {
-    return res.status(403).json({ error: "无权删除" });
-  }
-  // 删除子回复的通知和子回复
-  const childIds = db.prepare("SELECT id FROM comments WHERE parent_id = ?").all(commentId).map(r => r.id);
-  for (const cid of childIds) {
-    db.prepare("DELETE FROM notifications WHERE comment_id = ?").run(cid);
-  }
-  db.prepare("DELETE FROM comments WHERE parent_id = ?").run(commentId);
-  db.prepare("DELETE FROM notifications WHERE comment_id = ?").run(commentId);
-  db.prepare("DELETE FROM comments WHERE id = ?").run(commentId);
-  res.json({ ok: true });
+// ========== 动态/点赞/评论/通知 API ==========
+const { registerSocialRoutes } = require("./routes/social");
+registerSocialRoutes({
+  app,
+  db,
+  upload,
+  generateThumbnail,
+  getUser,
+  requireLogin,
+  requireAdmin,
+  publicDir: config.publicDir,
+  path,
+  fs,
 });
 
 // 公告页面路由
