@@ -34,7 +34,7 @@ let viewMode = "list"; // list | detail | admin
 
 // ========== 初始化 ==========
 document.addEventListener("DOMContentLoaded", async () => {
-  const token = localStorage.getItem("ps_main_token") || localStorage.getItem("token");
+  const token = localStorage.getItem("ps_main_token") || ((localStorage.getItem("token") && !localStorage.getItem("token").startsWith("eyJ")) ? localStorage.getItem("token") : "");
   if (token) {
     const user = await fetchMe(token);
     if (user) {
@@ -66,7 +66,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function fetchMe(token) {
   try {
     const res = await fetch("/api/me", { headers: { "Authorization": "Bearer " + token } });
-    if (!res.ok) { localStorage.removeItem("token"); localStorage.removeItem("ps_main_token"); return null; }
+    if (!res.ok) { if (res.status === 401 || res.status === 403) { localStorage.removeItem("token"); localStorage.removeItem("ps_main_token"); } return null; }
     return await res.json();
   } catch { return null; }
 }
@@ -160,7 +160,7 @@ async function doRegister() {
 }
 
 function doLogout() {
-  const token = localStorage.getItem("ps_main_token") || localStorage.getItem("token");
+  const token = localStorage.getItem("ps_main_token") || ((localStorage.getItem("token") && !localStorage.getItem("token").startsWith("eyJ")) ? localStorage.getItem("token") : "");
   if (token) fetch("/api/logout", { method: "POST", headers: { "Authorization": "Bearer " + token } }).catch(() => {});
   currentUser = null;
   localStorage.removeItem("token");

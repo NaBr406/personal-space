@@ -225,7 +225,7 @@
     })();
 
     async function checkLogin() {
-      const token = localStorage.getItem("ps_main_token") || localStorage.getItem("token");
+      const token = localStorage.getItem("ps_main_token") || ((localStorage.getItem("token") && !localStorage.getItem("token").startsWith("eyJ")) ? localStorage.getItem("token") : "");
       if (!token) return;
       try {
         const res = await fetch("/api/me", { headers: { "Authorization": "Bearer " + token } });
@@ -233,7 +233,7 @@
           currentUser = await res.json();
           currentUser.token = token;
           if (currentUser.role === "superadmin") document.getElementById("btnPublish").style.display = "";
-        } else {
+        } else if (res.status === 401 || res.status === 403) {
           localStorage.removeItem("token");
           localStorage.removeItem("ps_main_token");
         }

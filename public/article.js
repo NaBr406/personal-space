@@ -27,12 +27,12 @@ const isBlog = () => window.ARTICLE_CATEGORY === 'blog';
 })();
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const token = localStorage.getItem("ps_main_token") || localStorage.getItem("token");
+  const token = localStorage.getItem("ps_main_token") || ((localStorage.getItem("token") && !localStorage.getItem("token").startsWith("eyJ")) ? localStorage.getItem("token") : "");
   if (token) {
     try {
       const res = await fetch("/api/me", { headers: { "Authorization": "Bearer " + token } });
       if (res.ok) { currentUser = await res.json(); currentUser.token = token; }
-      else { localStorage.removeItem("token"); localStorage.removeItem("ps_main_token"); }
+      else if (res.status === 401 || res.status === 403) { localStorage.removeItem("token"); localStorage.removeItem("ps_main_token"); }
     } catch {}
   }
   updateUI();
@@ -1045,7 +1045,7 @@ function showToast(msg) {
 }
 function goLogin() { window.location.href = "/space/#login"; }
 function doLogout() {
-  const token = localStorage.getItem("ps_main_token") || localStorage.getItem("token");
+  const token = localStorage.getItem("ps_main_token") || ((localStorage.getItem("token") && !localStorage.getItem("token").startsWith("eyJ")) ? localStorage.getItem("token") : "");
   if (token) fetch("/api/logout", { method: "POST", headers: { "Authorization": "Bearer " + token } }).catch(() => {});
   currentUser = null;
   localStorage.removeItem("token");
